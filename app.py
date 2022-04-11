@@ -32,6 +32,8 @@ def hello_world():
             url = data['url']
             mode = data['mode']
 
+            docker_root = data['docker_root'] if 'docker_root' in data else '.'
+
             if mode not in modes:
                 return 'unsupported mode', 400
 
