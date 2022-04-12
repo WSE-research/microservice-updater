@@ -1,0 +1,13 @@
+version: '3.5'
+services:
+  micro-service-updater:
+    restart: always
+    build:
+      context: .
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - services:/services
+    ports:
+      - "9000:9000"
+volumes:
+  services: {}
