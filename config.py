@@ -1,1 +1,5 @@
-modes = ['docker', 'docker-compose']
+modes = [
+    'docker',
+    'docker-compose',
+    'dockerfile'
+]

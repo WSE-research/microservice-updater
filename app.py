@@ -12,10 +12,10 @@ if 'services' not in os.listdir():
     os.mkdir('services')
 
 # initialize database for service management
-with sqlite3.connect('services.db') as db:
+with sqlite3.connect('services/services.db') as db:
     cursor = db.cursor()
     cursor.execute('CREATE TABLE IF NOT EXISTS repos(id TEXT PRIMARY KEY, url TEXT, mode TEXT,'
-                   'state TEXT, port TEXT, docker_root TEXT)')
+                   'state TEXT, port TEXT, docker_root TEXT, image TEXT, tag TEXT)')
     cursor.close()
     db.commit()
 
@@ -30,14 +30,14 @@ def update_service(service_id: str):
     :param service_id: id of the requested service
     :return: GET - information about the service, POST - initialize update, DELETE - remove a service
     """
-    with sqlite3.connect('services.db') as service_db:
+    with sqlite3.connect('services/services.db') as service_db:
         # search service
         service_cursor = service_db.cursor()
         service_cursor.execute('SELECT * FROM repos WHERE id = ?', (service_id,))
 
         # service exists
         if service_data := service_cursor.fetchone():
-            _, url, mode, docker_state, port, docker_root = service_data
+            _, url, mode, docker_state, port, docker_root, image, tag = service_data
 
             if (method := request.method) == 'GET':
                 # load all docker container states
@@ -75,8 +75,12 @@ def update_service(service_id: str):
                 additional_data = {}
 
                 # add additional service information depending on initialization mode
-                if mode == 'docker':
+                if mode in ['docker', 'dockerfile']:
                     additional_data['port'] = port
+
+                    if mode == 'dockerfile':
+                        additional_data['image'] = image
+                        additional_data['tag'] = tag
 
                 return jsonify({'id': service_id, 'url': url, 'mode': mode, 'state': state,
                                 'docker_root': docker_root} | additional_data), 200
@@ -111,14 +115,19 @@ def hello_world():
             data = request.json
 
             # load git clone URL and initialization mode
-            url = data['url']
+            url = data['url'] if 'url' in data else ''
             mode = data['mode']
             port = ''
+            image = ''
+            tag = ''
 
             # mode "docker" requires external port mapping
-            if mode == 'docker' and 'port' not in data:
+            if mode in ['docker', 'dockerfile'] and ('port' not in data or 'image' not in data or 'tag' not in data):
                 return 'missing parameters', 400
-            elif mode == 'docker':
+            elif mode in ['docker', 'dockerfile']:
+                image = data['image']
+                tag = data['tag']
+
                 # check port mapping format
                 if re.match(r'^\d+:\d+$', data['port']):
                     port = data['port']
@@ -135,13 +144,13 @@ def hello_world():
 
             try:
                 # register new service
-                service_id = load_repository(url, mode, port, docker_root)
+                service_id = load_repository(url, mode, port, docker_root, image, tag)
 
                 # start new service
-                subprocess.Popen(['python', 'tasks/start_service.py', service_id, mode, docker_root])
+                subprocess.Popen(['python', 'tasks/start_service.py', service_id, mode, docker_root, port, image, tag])
             # service already existing
             except RepositoryAlreadyExistsException:
-                return "Service already existing", 400
+                return 'Service already existing', 400
         # Missing arguments in JSON payload
         except KeyError:
             return 'Missing argument', 400

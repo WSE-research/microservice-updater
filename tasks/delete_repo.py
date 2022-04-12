@@ -1,13 +1,13 @@
 import sys
 import shutil
-from tasks.update_service import stop_service
+from update_service import stop_service
 import sqlite3
 import os
 
 service_id = sys.argv[1]
 base_dir = os.getcwd()
 
-with sqlite3.connect('services.db') as db:
+with sqlite3.connect('services/services.db') as db:
     cursor = db.cursor()
 
     # check if service exists
