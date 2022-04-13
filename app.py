@@ -6,10 +6,19 @@ from config import modes
 from tasks.init_repo import load_repository
 from tasks.exceptions import RepositoryAlreadyExistsException
 import subprocess
+import sys
+import json
 
 # create directory for service repositories
 if 'services' not in os.listdir():
     os.mkdir('services')
+
+if 'api-keys.json' not in os.listdir():
+    print('api-keys.json missing')
+    sys.exit(-1)
+else:
+    with open('api_keys.json') as file:
+        keys = json.load(file)
 
 # initialize database for service management
 with sqlite3.connect('services/services.db') as db:
@@ -22,7 +31,7 @@ with sqlite3.connect('services/services.db') as db:
 app = Flask(__name__)
 
 
-@app.route('/service/<string:service_id>', methods=['GET', 'POST', 'DELETE'])
+@app.route('/service/<string:service_id>', methods=['POST', 'DELETE'])
 def update_service(service_id: str):
     """
     Accesses a service
@@ -30,6 +39,12 @@ def update_service(service_id: str):
     :param service_id: id of the requested service
     :return: GET - information about the service, POST - initialize update, DELETE - remove a service
     """
+    if request.content_type != 'application/json':
+        return 'JSON payload expected', 400
+
+    if 'API-KEY' not in request.json or request.json['API-KEY'] not in keys:
+        return 'valid API-KEY required', 400
+
     with sqlite3.connect('services/services.db') as service_db:
         # search service
         service_cursor = service_db.cursor()
@@ -39,53 +54,8 @@ def update_service(service_id: str):
         if service_data := service_cursor.fetchone():
             _, url, mode, docker_state, port, docker_root, image, tag = service_data
 
-            if (method := request.method) == 'GET':
-                # load all docker container states
-                services = subprocess.run(['docker', 'ps', '-a'], capture_output=True, encoding='utf-8')
-
-                # image was build successfully in the past
-                if docker_state != 'BUILD FAILED':
-                    # foreach existing docker container
-                    for output in services.stdout.split('\n')[1:]:
-                        # current container belongs to service_id
-                        if service_id in output:
-                            # container stopped
-                            if 'Exited' in output:
-                                new_state = 'STOPPED'
-                            # container running
-                            elif 'Up' in output:
-                                new_state = 'RUNNING'
-                            # default case - keep current state
-                            else:
-                                new_state = docker_state
-
-                            # update state in db
-                            service_cursor.execute('UPDATE repos SET state = ? WHERE id = ?',
-                                                   (new_state, service_id))
-                            service_db.commit()
-
-                            # stop, if at least one container of the service stopped
-                            if new_state == 'STOPPED':
-                                break
-
-                # get current state
-                service_cursor.execute('SELECT state FROM repos WHERE id = ?', (service_id,))
-                state = service_cursor.fetchone()[0]
-
-                additional_data = {}
-
-                # add additional service information depending on initialization mode
-                if mode in ['docker', 'dockerfile']:
-                    additional_data['port'] = port
-
-                    if mode == 'dockerfile':
-                        additional_data['image'] = image
-                        additional_data['tag'] = tag
-
-                return jsonify({'id': service_id, 'url': url, 'mode': mode, 'state': state,
-                                'docker_root': docker_root} | additional_data), 200
             # service update requested
-            elif method == 'POST':
+            if request.method == 'POST':
                 # start background task to update the service
                 subprocess.Popen(['python', 'tasks/update_service.py', service_id])
                 return 'Update initiated', 200
@@ -113,6 +83,9 @@ def hello_world():
 
         try:
             data = request.json
+
+            if 'API-KEY' not in data or data['API-KEY'] not in keys:
+                return 'valid API-KEY required', 400
 
             # load git clone URL and initialization mode
             url = data['url'] if 'url' in data else ''
