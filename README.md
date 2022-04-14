@@ -41,7 +41,7 @@ The API provides the following endpoints:
     the parameters `image`, `tag` and `port`. Set `mode` to `dockerfile`
 
 * `https://$HOST:$SERVICE_PORT/service/$SERVICE_ID`
-  * POST-Request: initializes an updated of `$SERVICE_ID`
+  * POST-Request: initializes an update of `$SERVICE_ID`
     ```json
     {
       "API-KEY": "a49bc0..."
