@@ -9,13 +9,16 @@ Before starting the service it is necessary to create the file `api_keys.json`
 in the project's root directory. There you have to add the API keys as a
 list of strings.
 
+The service requires a valid SSL certificate. Please replace the files in
+the `ssl` directory.
+
 Run `docker-compose up -d` to start the service. You can change the external
 port of this service by editing the variable `SERVICE_PORT` in the `.env`
 file.
 
 ## API endpoints
 The API provides the following endpoints:
-* `http://$HOST:$SERVICE_PORT/service`
+* `https://$HOST:$SERVICE_PORT/service`
   * GET-Request: provides a list of all monitored git repositories
   * POST-Request: registers a new docker service to monitor
     ```json
@@ -37,7 +40,7 @@ The API provides the following endpoints:
     3. **Pre-build image from Dockerhub**: To use a pre-build image provide
     the parameters `image`, `tag` and `port`. Set `mode` to `dockerfile`
 
-* `http://$HOST:$SERVICE_PORT/service/$SERVICE_ID`
+* `https://$HOST:$SERVICE_PORT/service/$SERVICE_ID`
   * POST-Request: initializes an updated of `$SERVICE_ID`
     ```json
     {
