@@ -7,4 +7,4 @@ RUN pip3 install --no-cache --upgrade pip setuptools
 COPY . .
 RUN pip3 install -r requirements.txt
 RUN pip3 install gunicorn docker-compose
-CMD gunicorn app:app -w 8 -b 0.0.0.0:9000
+CMD gunicorn -w 8 -b 0.0.0.0:9000 --certfile=ssl/server.crt --keyfile=ssl/server.key app:app

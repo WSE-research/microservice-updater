@@ -17,7 +17,7 @@ if 'api-keys.json' not in os.listdir():
     print('api-keys.json missing')
     sys.exit(-1)
 else:
-    with open('api_keys.json') as file:
+    with open('api-keys.json') as file:
         keys = json.load(file)
 
 # initialize database for service management
@@ -75,7 +75,9 @@ def hello_world():
     :return: GET - list of all service ids, POST - service id for a new service
     """
     if request.method == 'GET':
-        return jsonify(os.listdir('services')), 200
+        output = os.listdir('services')
+        output.remove('services.db')
+        return jsonify(output), 200
     else:
         # backend requires JSON data
         if request.content_type != 'application/json':
