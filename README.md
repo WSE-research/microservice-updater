@@ -17,7 +17,7 @@ file.
 The API provides the following endpoints:
 * `http://$HOST:$SERVICE_PORT/service`
   * GET-Request: provides a list of all monitored git repositories
-  * POST-Request: register a new docker service to monitor
+  * POST-Request: registers a new docker service to monitor
     ```json
     {
       "API-KEY": "a49bc0...",
@@ -36,3 +36,17 @@ The API provides the following endpoints:
     The needed `mode` is `docker-compose`.
     3. **Pre-build image from Dockerhub**: To use a pre-build image provide
     the parameters `image`, `tag` and `port`. Set `mode` to `dockerfile`
+
+* `http://$HOST:$SERVICE_PORT/service/$SERVICE_ID`
+  * POST-Request: initializes an updated of `$SERVICE_ID`
+    ```json
+    {
+      "API-KEY": "a49bc0..."
+    }
+    ```
+  * DELETE-Request: stop and delete `$SERVICE_ID`
+    ```json
+    {
+      "API-KEY": "a49bc0..."
+    }
+    ```
