@@ -5,7 +5,7 @@ automatically and rebuilds related Docker services. Therefore, a simple
 REST-API is provided.
 
 ## Installation
-Before starting the service it is necessary to create the file `api_keys.json`
+Before starting the service it is necessary to create the file `api-keys.json`
 in the project's root directory. There you have to add the API keys as a
 list of strings.
 
