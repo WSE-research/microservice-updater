@@ -27,4 +27,4 @@ jobs:
     steps:
     # Runs a single command using the runners shell
     - name: Send greeting
-      run: 'apt-get install curl; curl -k -X POST ${{ secrets.UPDATER_URL }}${{ secrets.REPO_ID }} -H "Content-Type: application/json" -d "{\"API-KEY\": ${{ secrets.API_KEY }}}"'
+      run: 'curl -k -X POST ${{ secrets.UPDATER_URL }}${{ secrets.REPO_ID }} -H "Content-Type: application/json" -d "{\"API-KEY\": ${{ secrets.API_KEY }}}"'
