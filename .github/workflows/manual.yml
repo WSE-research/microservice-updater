@@ -27,4 +27,4 @@ jobs:
     steps:
     # Runs a single command using the runners shell
     - name: Send greeting
-      run: 'curl -k -X POST https://schmidke.xyz:9000/service/wdaqua-qanary-chatbot-ui -H "Content-Type: application/json" -d "{\"API-KEY\": 1234}"'
+      run: echo "Test" # 'curl -k -X POST https://schmidke.xyz:9000/service/wdaqua-qanary-chatbot-ui -H "Content-Type: application/json" -d "{\"API-KEY\": 1234}"'
