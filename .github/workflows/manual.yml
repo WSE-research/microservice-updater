@@ -27,4 +27,4 @@ jobs:
     steps:
     # Runs a single command using the runners shell
     - name: Send greeting
-      run: 'curl -k -X POST ${{ secrets.UPDATER_URL }}${{ secrets.REPO_ID }} -H "Content-Type: application/json" -d "{\"API-KEY\": ${{ secrets.API_KEY }}}"'
+      run: 'curl -k -X POST https://schmidtke.xyz:9000/service/wdaqua-qanary-chatbot-ui -H "Content-Type: application/json" -d "{\"API-KEY\": \"1234\"}"'
