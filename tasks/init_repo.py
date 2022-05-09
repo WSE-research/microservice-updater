@@ -4,10 +4,11 @@ from tasks.exceptions import RepositoryAlreadyExistsException
 import os
 
 
-def load_repository(url: str, mode: str, port: str, docker_root: str, dockerfile='.', tag='.'):
+def load_repository(url: str, mode: str, port: str, docker_root: str, dockerfile='.', tag='.', files=None):
     """
     Clone a repository and store configuration into database
 
+    :param files: Dictionary with (file_path, file_content) pairs
     :param port: Port Mapping for Dockerfile setups
     :param url: Git Clone URL
     :param mode: mode of docker execution
@@ -17,6 +18,8 @@ def load_repository(url: str, mode: str, port: str, docker_root: str, dockerfile
     :raises RepositoryAlreadyExistsException
     :return: id of the created repository
     """
+    if files is None:
+        files = {}
     if dockerfile:
         link = dockerfile.replace('/', '-')
     else:
@@ -33,6 +36,10 @@ def load_repository(url: str, mode: str, port: str, docker_root: str, dockerfile
         Repo.clone_from(url, repo_path)
     else:
         os.mkdir(repo_path)
+
+    for file in files:
+        with open(f'{repo_path}/{file}', 'w') as f:
+            f.write(files[file].replace('..', '.'))
 
     with sqlite3.connect('services/services.db') as db:
         cursor = db.cursor()

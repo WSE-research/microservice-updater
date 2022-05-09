@@ -31,6 +31,15 @@ with sqlite3.connect('services/services.db') as db:
 app = Flask(__name__)
 
 
+def valid(docker_mode: str):
+    if docker_mode == 'docker':
+        return 'port' in request.json
+    elif docker_mode == 'dockerfile':
+        return 'port' in request.json and 'image' in request.json and 'tag' in request.json
+    else:
+        return True
+
+
 @app.route('/service/<string:service_id>', methods=['POST', 'DELETE'])
 def update_service(service_id: str):
     """
@@ -91,17 +100,18 @@ def hello_world():
 
             # load git clone URL and initialization mode
             url = data['url'] if 'url' in data else ''
+            files = data['files'] if 'files' in data else {}
             mode = data['mode']
             port = ''
             image = ''
             tag = ''
 
             # mode "docker" requires external port mapping
-            if mode in ['docker', 'dockerfile'] and ('port' not in data or 'image' not in data or 'tag' not in data):
+            if mode in ['docker', 'dockerfile'] and not valid(mode):
                 return 'missing parameters', 400
             elif mode in ['docker', 'dockerfile']:
-                image = data['image']
-                tag = data['tag']
+                image = data['image'] if mode == 'dockerfile' else ''
+                tag = data['tag'] if mode == 'dockerfile' else ''
 
                 # check port mapping format
                 if re.match(r'^\d+:\d+$', data['port']):
@@ -119,7 +129,7 @@ def hello_world():
 
             try:
                 # register new service
-                service_id = load_repository(url, mode, port, docker_root, image, tag)
+                service_id = load_repository(url, mode, port, docker_root, image, tag, files)
 
                 # start new service
                 subprocess.Popen(['python', 'tasks/start_service.py', service_id, mode, docker_root, port, image, tag])

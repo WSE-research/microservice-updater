@@ -29,7 +29,10 @@ The API provides the following endpoints:
       "docker_root": "path to Dockerfile or docker-compose.yml (optional)",
       "port": "port mapping (optional)",
       "image": "dockerhub image (optional)",
-      "tag": "dockerhub image tag (optional)"
+      "tag": "dockerhub image tag (optional)",
+      "files": {
+        "path_and_file_name": "file_content"
+      }
     }
     ```
     The service supports multiple ways to monitor git repositories:
