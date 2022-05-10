@@ -40,7 +40,7 @@ def valid(docker_mode: str):
         return True
 
 
-@app.route('/service/<string:service_id>', methods=['POST', 'DELETE'])
+@app.route('/service/<string:service_id>', methods=['POST', 'DELETE', 'GET'])
 def update_service(service_id: str):
     """
     Accesses a service
@@ -64,20 +64,29 @@ def update_service(service_id: str):
             _, url, mode, docker_state, port, docker_root, image, tag = service_data
 
             # service update requested
-            if request.method == 'POST':
+            if (method := request.method) == 'POST':
                 # start background task to update the service
                 subprocess.Popen(['python', 'tasks/update_service.py', service_id])
                 return 'Update initiated', 200
-            else:
+            elif method == 'DELETE':
                 subprocess.run(['python', 'tasks/delete_repo.py', service_id])
                 return f'{service_id} removed', 200
+            else:
+                if os.path.exists(f'services/{service_id}/error.txt'):
+                    with open(f'services/{service_id}/error.txt') as f:
+                        return jsonify({
+                            'id': service_id,
+                            'errors': f.read()
+                        }), 200
+                else:
+                    return jsonify({'id': service_id, 'errors': None})
         # service does not exist
         else:
             return f'{service_id} not found', 404
 
 
 @app.route('/service', methods=['GET', 'POST'])
-def hello_world():
+def get_services():
     """
     Endpoint to get all services or register new ones
 

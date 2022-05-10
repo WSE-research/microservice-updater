@@ -38,6 +38,7 @@ if __name__ == '__main__':
             # pull the newest commits from remote server
             if os.path.exists(f'services/{service_id}/.git'):
                 repo = Repo(f'services/{service_id}/.git')
+                repo.head.reset('--hard')
                 repo.remote('origin').pull()
 
             os.chdir(f'services/{service_id}/{service[0]}')

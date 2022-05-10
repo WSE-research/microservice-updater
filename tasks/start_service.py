@@ -18,35 +18,52 @@ def start_service(service_id: str, mode: str, db, cursor, port, dockerfile, tag)
     """
     if mode == 'docker':
         # build docker image
-        build = subprocess.run(['docker', 'build', '.', '-t', f'{service_id}:latest'])
+        try:
+            subprocess.run(['docker', 'build', '.', '-t', f'{service_id}:latest'], check=True,
+                           capture_output=True)
 
-        # build failed
-        if build.returncode:
-            cursor.execute('UPDATE repos SET state = \'BUILD FAILED\' WHERE id = ?', (service_id,))
-            db.commit()
-        else:
             # start container
-            subprocess.run(['docker', 'run', '-itd', '-p', port, '--name', service_id, f'{service_id}:latest'])
+            subprocess.run(['docker', 'run', '-itd', '-p', port, '--name', service_id, f'{service_id}:latest'],
+                           check=True, capture_output=True)
             cursor.execute('UPDATE repos SET state = \'RUNNING\' WHERE id = ?', (service_id,))
             db.commit()
-    elif mode == 'docker-compose':
-        # build docker images
-        build = subprocess.run(['docker-compose', 'build'])
 
-        # build failed
-        if build.returncode:
+        except subprocess.CalledProcessError as e:
+            with open('error.txt', 'wb') as f:
+                f.write(e.stderr)
+
             cursor.execute('UPDATE repos SET state = \'BUILD FAILED\' WHERE id = ?', (service_id,))
             db.commit()
-        else:
+
+    elif mode == 'docker-compose':
+        # build docker images
+        try:
+            subprocess.run(['docker-compose', 'build'], check=True, capture_output=True)
+
             # start services
             subprocess.run(['docker-compose', 'up', '-d'])
             cursor.execute('UPDATE repos SET state = \'RUNNING\' WHERE id = ?', (service_id,))
             db.commit()
+        except subprocess.CalledProcessError as e:
+            with open('error.txt', 'wb') as f:
+                f.write(e.stderr)
+
+            cursor.execute('UPDATE repos SET state = \'BUILD FAILED\' WHERE id = ?', (service_id,))
+            db.commit()
+
     elif mode == 'dockerfile':
-        subprocess.run(['docker', 'pull', f'{dockerfile}:{tag}'])
-        subprocess.run(['docker', 'run', '-itd', '-p', port, '--name', dockerfile, f'{dockerfile}:{tag}'])
-        cursor.execute('UPDATE repos SET state = \'RUNNING\' WHERE id = ?', (dockerfile,))
-        db.commit()
+        try:
+            subprocess.run(['docker', 'pull', f'{dockerfile}:{tag}'], check=True, capture_output=True)
+            subprocess.run(['docker', 'run', '-itd', '-p', port, '--name', dockerfile, f'{dockerfile}:{tag}'],
+                           check=True, capture_output=True)
+            cursor.execute('UPDATE repos SET state = \'RUNNING\' WHERE id = ?', (dockerfile,))
+            db.commit()
+        except subprocess.CalledProcessError as e:
+            with open('error.txt', 'wb') as f:
+                f.write(e.stderr)
+
+            cursor.execute('UPDATE repos SET state = \'BUILD FAILED\' WHERE id = ?', (dockerfile,))
+            db.commit()
 
 
 if __name__ == '__main__':
