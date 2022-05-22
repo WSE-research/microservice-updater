@@ -79,7 +79,7 @@ def update_service(service_id: str):
                             'errors': f.read()
                         }), 200
                 else:
-                    return jsonify({'id': service_id, 'errors': None})
+                    return jsonify({'id': service_id, 'errors': None}), 200
         # service does not exist
         else:
             return f'{service_id} not found', 404

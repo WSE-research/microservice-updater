@@ -38,8 +38,12 @@ def load_repository(url: str, mode: str, port: str, docker_root: str, dockerfile
         os.mkdir(repo_path)
 
     for file in files:
-        with open(f'{repo_path}/{file}', 'w') as f:
-            f.write(files[file].replace('..', '.'))
+        file_path = f'{repo_path}/{file.replace("..", ".")}'
+
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+
+        with open(file_path, 'w') as f:
+            f.write(files[file])
 
     with sqlite3.connect('services/services.db') as db:
         cursor = db.cursor()

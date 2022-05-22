@@ -2,6 +2,7 @@ import sys
 import sqlite3
 import os
 from git.repo import Repo
+from json import loads
 import subprocess
 from start_service import start_service
 
@@ -25,6 +26,11 @@ if __name__ == '__main__':
 
     service_id = sys.argv[1]
 
+    if file_string := sys.argv[2]:
+        files = loads(file_string)
+    else:
+        files = {}
+
     with sqlite3.connect('services/services.db') as db:
         cursor = db.cursor()
 
@@ -40,6 +46,14 @@ if __name__ == '__main__':
                 repo = Repo(f'services/{service_id}/.git')
                 repo.head.reset('--hard')
                 repo.remote('origin').pull()
+
+                for file in files:
+                    file_path = f'services/{service_id}/{file.replace("..", ".")}'
+
+                    os.makedirs(os.path.dirname(file_path), exist_ok=True)
+                    
+                    with open(file_path, 'w') as f:
+                        f.write(files[file])
 
             os.chdir(f'services/{service_id}/{service[0]}')
 

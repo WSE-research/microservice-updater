@@ -31,7 +31,7 @@ The API provides the following endpoints:
       "image": "dockerhub image (optional)",
       "tag": "dockerhub image tag (optional)",
       "files": {
-        "path_and_file_name": "file_content"
+        "path_and_file_name": "file content"
       }
     }
     ```
@@ -40,14 +40,20 @@ The API provides the following endpoints:
     parameters `url` and `port`. The `mode` has to be `docker`.
     2. **Git repository with docker-compose**: `url` has to be specified.
     The needed `mode` is `docker-compose`.
-    3. **Pre-build image from Dockerhub**: To use a pre-build image provide
-    the parameters `image`, `tag` and `port`. Set `mode` to `dockerfile`
+    3. **Pre-build image from Dockerhub**: To use a pre-built image provide
+    the parameters `image`, `tag` and `port`. Set `mode` to `dockerfile`.
+  
+  **Remark**: If custom files have been provided via the `files` parameter, they have to be submitted
+  in all `UPDATE` requests, otherwise they get lost.
 
 * `https://$HOST:$SERVICE_PORT/service/$SERVICE_ID`
   * POST-Request: initializes an update of `$SERVICE_ID`
     ```json
     {
-      "API-KEY": "a49bc0..."
+      "API-KEY": "a49bc0...",
+      "files": {
+        "path_and_file_name": "file content"
+      }
     }
     ```
   * DELETE-Request: stop and delete `$SERVICE_ID`
