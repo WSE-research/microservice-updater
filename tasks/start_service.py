@@ -2,6 +2,8 @@ import sys
 import os
 import sqlite3
 import subprocess
+import docker
+from docker.errors import APIError, BuildError, ImageNotFound
 
 
 def start_service(service_id: str, mode: str, db, cursor, port, dockerfile, tag):
@@ -16,52 +18,86 @@ def start_service(service_id: str, mode: str, db, cursor, port, dockerfile, tag)
     :param dockerfile: image from dockerhub
     :param tag: tag of dockerfile
     """
+    # service has an environment file
+    if '.env' in os.listdir():
+        # read environment variables
+        with open('.env') as f:
+            env = f.readlines()
+    else:
+        env = None
+
+    # docker image from git repository
     if mode == 'docker':
+        docker_client = docker.from_env()
+
         # build docker image
         try:
-            subprocess.run(['docker', 'build', '.', '-t', f'{service_id}:latest'], check=True,
-                           capture_output=True)
+            # get ports
+            ex_port, in_port = port.split(':')
+
+            # build docker image
+            image, _ = docker_client.images.build(path='.', tag=service_id, rm=True)
 
             # start container
-            subprocess.run(['docker', 'run', '-itd', '-p', port, '--name', service_id, f'{service_id}:latest'],
-                           check=True, capture_output=True)
+            docker_client.containers.run(f'{service_id}:latest', detach=True, ports={int(in_port): int(ex_port)},
+                                         name=service_id, restart_policy={'Name': 'always'}, environment=env)
+
             cursor.execute('UPDATE repos SET state = \'RUNNING\' WHERE id = ?', (service_id,))
             db.commit()
+        # image build failed
+        except (APIError, BuildError) as e:
+            # write error message
+            with open('error.txt', 'w') as f:
+                f.write(e.explanation if e is APIError else e.msg)
 
-        except subprocess.CalledProcessError as e:
-            with open('error.txt', 'wb') as f:
-                f.write(e.stderr)
-
+            # set state to BUILD FAILED
             cursor.execute('UPDATE repos SET state = \'BUILD FAILED\' WHERE id = ?', (service_id,))
             db.commit()
 
+    # docker-compose from git repository
     elif mode == 'docker-compose':
         # build docker images
         try:
+            # build docker containers
             subprocess.run(['docker-compose', 'build'], check=True, capture_output=True)
 
             # start services
             subprocess.run(['docker-compose', 'up', '-d'])
             cursor.execute('UPDATE repos SET state = \'RUNNING\' WHERE id = ?', (service_id,))
             db.commit()
+        # build failed
         except subprocess.CalledProcessError as e:
+            # write error message
             with open('error.txt', 'wb') as f:
                 f.write(e.stderr)
 
+            # set state to BUILD FAILED
             cursor.execute('UPDATE repos SET state = \'BUILD FAILED\' WHERE id = ?', (service_id,))
             db.commit()
 
+    # docker image from docker hub
     elif mode == 'dockerfile':
+        docker_client = docker.from_env()
+
         try:
-            subprocess.run(['docker', 'pull', f'{dockerfile}:{tag}'], check=True, capture_output=True)
-            subprocess.run(['docker', 'run', '-itd', '-p', port, '--name', dockerfile, f'{dockerfile}:{tag}'],
-                           check=True, capture_output=True)
+            # set image name and port mapping
+            image_name = f'{dockerfile}:{tag}'
+            ex_port, in_port = port.split(':')
+
+            # pull image and start container
+            docker_client.images.pull(dockerfile, tag)
+            docker_client.containers.run(image_name, detach=True, tty=True, ports={int(in_port): int(ex_port)},
+                                         name=dockerfile, restart_policy={'Name': 'always'}, environment=env)
+
             cursor.execute('UPDATE repos SET state = \'RUNNING\' WHERE id = ?', (dockerfile,))
             db.commit()
-        except subprocess.CalledProcessError as e:
-            with open('error.txt', 'wb') as f:
-                f.write(e.stderr)
+        # image pull failed
+        except (APIError, ImageNotFound) as e:
+            # write error message
+            with open('error.txt', 'w') as f:
+                f.write(e.explanation)
 
+            # set state to BUILD failed
             cursor.execute('UPDATE repos SET state = \'BUILD FAILED\' WHERE id = ?', (dockerfile,))
             db.commit()
 

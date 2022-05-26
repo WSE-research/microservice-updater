@@ -5,6 +5,8 @@ from git.repo import Repo
 from json import loads
 import subprocess
 from start_service import start_service
+import docker
+from docker.errors import NotFound
 
 
 def stop_service(docker_mode: str, s_id: str):
@@ -14,9 +16,19 @@ def stop_service(docker_mode: str, s_id: str):
     :param docker_mode: initialization mode
     :param s_id: microservice id
     """
+    # single dockerfile used
     if docker_mode in ['docker', 'dockerfile']:
-        subprocess.run(['docker', 'container', 'stop', s_id])
-        subprocess.run(['docker', 'container', 'rm', s_id])
+        docker_client = docker.from_env()
+
+        try:
+            # get, stop and remove container
+            container = docker_client.containers.get(s_id)
+            container.stop()
+            container.remove()
+        # container doesn't exist
+        except NotFound:
+            pass
+    # docker-compose used
     elif docker_mode == 'docker-compose':
         subprocess.run(['docker-compose', 'down'])
 
@@ -37,6 +49,7 @@ if __name__ == '__main__':
         # check, if service exists
         cursor.execute('SELECT docker_root, mode, port, image, tag FROM repos WHERE id = ?', (service_id,))
 
+        # service exists
         if service := cursor.fetchone():
             cursor.execute('UPDATE repos SET state = \'UPDATING\' WHERE id = ?', (service_id,))
             db.commit()
@@ -47,6 +60,7 @@ if __name__ == '__main__':
                 repo.head.reset('--hard')
                 repo.remote('origin').pull()
 
+                # update custom files
                 for file in files:
                     file_path = f'services/{service_id}/{file.replace("..", ".")}'
 

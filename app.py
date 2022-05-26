@@ -8,6 +8,7 @@ from tasks.exceptions import RepositoryAlreadyExistsException
 import subprocess
 import sys
 import json
+from git import GitCommandError
 
 # create directory for service repositories
 if 'services' not in os.listdir():
@@ -86,7 +87,7 @@ def update_service(service_id: str):
 
 
 @app.route('/service', methods=['GET', 'POST'])
-def get_services():
+def manage_services():
     """
     Endpoint to get all services or register new ones
 
@@ -145,6 +146,9 @@ def get_services():
             # service already existing
             except RepositoryAlreadyExistsException:
                 return 'Service already existing', 400
+            # Git clone failed
+            except GitCommandError as e:
+                return jsonify({'error': e.stderr}), 400
         # Missing arguments in JSON payload
         except KeyError:
             return 'Missing argument', 400
