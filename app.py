@@ -1,8 +1,7 @@
 from flask import Flask, request, jsonify
 import os
 import sqlite3
-import re
-from config import modes
+from service_config.config import modes, check_ports
 from tasks.init_repo import load_repository
 from tasks.exceptions import RepositoryAlreadyExistsException
 import subprocess
@@ -124,7 +123,7 @@ def manage_services():
                 tag = data['tag'] if mode == 'dockerfile' else ''
 
                 # check port mapping format
-                if re.match(r'^\d+:\d+$', data['port']):
+                if check_ports(data['port']):
                     port = data['port']
                 # invalid format
                 else:

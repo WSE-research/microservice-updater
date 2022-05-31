@@ -16,6 +16,12 @@ Run `docker-compose up -d` to start the service. You can change the external
 port of this service by editing the variable `SERVICE_PORT` in the `.env`
 file.
 
+## Automatic registration of services
+In the directory `service_config` is a tool `init_services` that allows
+a user to register a list of services at his Microservice Updater. The configuration
+has to be done with the `service_config.json`, an example for registering a
+nginx service on localhost is provided.
+
 ## API endpoints
 The API provides the following endpoints:
 * `https://$HOST:$SERVICE_PORT/service`

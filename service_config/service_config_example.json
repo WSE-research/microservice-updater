@@ -1,0 +1,15 @@
+{
+  "host": "http://localhost:5000",
+  "API-KEY": "1234",
+  "services": [
+    {
+      "mode": "dockerfile",
+      "port": "7000:80",
+      "image": "nginx",
+      "tag": "alpine",
+      "files": {
+        ".test": ".gitkeep"
+      }
+    }
+  ]
+}

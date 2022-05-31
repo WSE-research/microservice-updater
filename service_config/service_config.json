@@ -1,0 +1,17 @@
+{
+  "host": "YOUR HOSTNAME AND PORT (e. g. http://localhost:8080)",
+  "API-KEY": "YOUR API KEY",
+  "services": [
+    {
+      "mode": "SUPPORTED mode",
+      "url": "URL of git repository (optional)",
+      "docker_root": "path to Dockerfile or docker-compose.yml (optional)",
+      "port": "port mapping (optional)",
+      "image": "dockerhub image (optional)",
+      "tag": "dockerhub image tag (optional)",
+      "files": {
+        "PATH INSIDE THE DOCKER CONTAINER": "PATH TO FILE IN files DIRECTORY"
+      }
+    }
+  ]
+}

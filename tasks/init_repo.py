@@ -31,7 +31,7 @@ def load_repository(url: str, mode: str, port: str, docker_root: str, dockerfile
     if os.path.exists(repo_path):
         raise RepositoryAlreadyExistsException()
 
-    if url != '':
+    if mode != 'dockerfile':
         # clone repository
         Repo.clone_from(url, repo_path)
     else:
