@@ -22,4 +22,7 @@ jobs:
     - name: Push docker image
       run: docker push bigoli98/microservice-updater:latest
     - name: Init update
+      env:
+        API_KEY: ${{ secrets.API_KEY }}
+        UPDATER_HOST: ${{ secrets.UPDATER_HOST }}
       run: cd service_config && python init_services.py update
