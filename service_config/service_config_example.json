@@ -12,7 +12,7 @@
       }
     }
   ],
-  "ids": [
-    "YOUR SERVICE ID"
-  ]
+  "ids": {
+    "configuration number": "YOUR SERVICE ID"
+  }
 }

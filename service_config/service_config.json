@@ -7,7 +7,7 @@
       "tag": "latest"
     }
   ],
-  "ids": [
-    "bigoli98-microservice-updater"
-  ]
+  "ids": {
+    "0": "bigoli98-microservice-updater"
+  }
 }
