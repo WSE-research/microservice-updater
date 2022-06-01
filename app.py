@@ -68,7 +68,7 @@ def update_service(service_id: str):
                 files = request.json['files'] if 'files' in request.json else {}
 
                 # start background task to update the service
-                subprocess.Popen(['python', 'tasks/update_service.py', service_id, files])
+                subprocess.Popen(['python', 'tasks/update_service.py', service_id, json.dumps(files)])
                 return 'Update initiated', 200
             elif method == 'DELETE':
                 subprocess.run(['python', 'tasks/delete_repo.py', service_id])
