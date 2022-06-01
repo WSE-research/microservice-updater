@@ -87,9 +87,9 @@ def start_service(service_id: str, mode: str, db, cursor, port, dockerfile, tag)
             # pull image and start container
             docker_client.images.pull(dockerfile, tag)
             docker_client.containers.run(image_name, detach=True, tty=True, ports={int(in_port): int(ex_port)},
-                                         name=dockerfile, restart_policy={'Name': 'always'}, environment=env)
+                                         name=service_id, restart_policy={'Name': 'always'}, environment=env)
 
-            cursor.execute('UPDATE repos SET state = \'RUNNING\' WHERE id = ?', (dockerfile,))
+            cursor.execute('UPDATE repos SET state = \'RUNNING\' WHERE id = ?', (service_id,))
             db.commit()
         # image pull failed
         except (APIError, ImageNotFound) as e:
@@ -98,7 +98,7 @@ def start_service(service_id: str, mode: str, db, cursor, port, dockerfile, tag)
                 f.write(e.explanation)
 
             # set state to BUILD failed
-            cursor.execute('UPDATE repos SET state = \'BUILD FAILED\' WHERE id = ?', (dockerfile,))
+            cursor.execute('UPDATE repos SET state = \'BUILD FAILED\' WHERE id = ?', (service_id,))
             db.commit()
 
 
