@@ -15,8 +15,8 @@ mode = sys.argv[1]
 with open('service_config.json') as f:
     initialization_configuration = json.load(f)
 
-host = environ['secrets.UPDATER-HOST']
-api_key = environ['secrets.API-KEY']
+host = environ['secrets.UPDATER_HOST']
+api_key = environ['secrets.API_KEY']
 
 d = {}
 
