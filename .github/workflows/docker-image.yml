@@ -21,3 +21,5 @@ jobs:
       run: docker tag msu:latest bigoli98/microservice-updater:latest
     - name: Push docker image
       run: docker push bigoli98/microservice-updater:latest
+    - name: Init update
+      run: cd service_config && python init_services.py update

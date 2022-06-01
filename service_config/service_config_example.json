@@ -1,15 +1,18 @@
 {
-  "host": "http://localhost:5000",
-  "API-KEY": "1234",
   "services": [
     {
-      "mode": "dockerfile",
-      "port": "7000:80",
-      "image": "nginx",
-      "tag": "alpine",
+      "mode": "SUPPORTED mode",
+      "url": "URL of git repository (optional)",
+      "docker_root": "path to Dockerfile or docker-compose.yml (optional)",
+      "port": "port mapping (optional)",
+      "image": "dockerhub image (optional)",
+      "tag": "dockerhub image tag (optional)",
       "files": {
-        ".test": ".gitkeep"
+        "PATH INSIDE THE DOCKER CONTAINER": "PATH TO FILE IN files DIRECTORY"
       }
     }
+  ],
+  "ids": [
+    "YOUR SERVICE ID"
   ]
 }
