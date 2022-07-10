@@ -25,6 +25,19 @@ jobs:
 
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
-    # Runs a single command using the runners shell
-    - name: Send greeting
-      run: 'curl -k -X POST https://schmidtke.xyz:9000/service/wdaqua-qanary-chatbot-ui -H "Content-Type: application/json" -d "{\"API-KEY\": \"1234\"}"'
+    - uses: actions/checkout@v3
+    - name: Build the Docker image
+      run: docker build . --file Dockerfile --tag msu:latest
+    - name: Docker Login
+      uses: docker/login-action@v2
+      with:
+        username: ${{ secrets.DOCKER_USER }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
+    - name: Tag docker image
+      run: docker tag msu:latest bigoli98/microservice-updater:latest
+    - name: Push docker image
+      run: docker push bigoli98/microservice-updater:latest
+    - uses: MindMaster98/docker-service-updater@v0.1.1
+      with:
+        updater_host: 'http://schmidtke.xyz:9000'
+        api_key: '1234'
