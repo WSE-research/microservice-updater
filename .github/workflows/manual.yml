@@ -39,5 +39,5 @@ jobs:
       run: docker push bigoli98/microservice-updater:latest
     - uses: MindMaster98/docker-service-updater@v0.1.4
       with:
-        updater_host: 'http://schmidtke.xyz:9000'
+        updater_host: 'https://schmidtke.xyz:9000'
         api_key: "1234"
