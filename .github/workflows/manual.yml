@@ -37,7 +37,7 @@ jobs:
       run: docker tag msu:latest bigoli98/microservice-updater:latest
     - name: Push docker image
       run: docker push bigoli98/microservice-updater:latest
-    - uses: MindMaster98/docker-service-updater@v0.1.3
+    - uses: MindMaster98/docker-service-updater@v0.1.4
       with:
         updater_host: 'http://schmidtke.xyz:9000'
         api_key: "1234"
