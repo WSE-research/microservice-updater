@@ -124,8 +124,8 @@ if __name__ == '__main__':
 
     base_path = os.getcwd()
 
-    with sqlite3.connect('services/services.db') as database:
-        os.chdir(f'{base_path}/services/{s_id}/{docker_directory}')
+    with sqlite3.connect(os.path.join('services', 'services.db')) as database:
+        os.chdir(os.path.join(base_path, 'services', s_id, docker_directory))
         db_cursor = database.cursor()
 
         # check if service exists

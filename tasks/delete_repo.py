@@ -7,7 +7,7 @@ import os
 service_id = sys.argv[1]
 base_dir = os.getcwd()
 
-with sqlite3.connect('services/services.db') as db:
+with sqlite3.connect(os.path.join('services', 'services.db')) as db:
     cursor = db.cursor()
 
     # check if service exists
@@ -17,11 +17,11 @@ with sqlite3.connect('services/services.db') as db:
         mode = output[0]
         root = output[1]
 
-        os.chdir(f'services/{service_id}/{root}')
+        os.chdir(os.path.join('services', service_id, root))
 
         # stop container and delete git repository
         stop_service(mode, service_id)
-        shutil.rmtree(f'{base_dir}/services/{service_id}')
+        shutil.rmtree(os.path.join(base_dir, 'services', service_id))
         cursor.execute('DELETE FROM repos WHERE id = ?', (service_id,))
         db.commit()
 

@@ -71,8 +71,12 @@ def update_service(service_id: str):
                 subprocess.Popen(['python', 'tasks/update_service.py', service_id, json.dumps(files)])
                 return 'Update initiated', 200
             elif method == 'DELETE':
-                subprocess.run(['python', 'tasks/delete_repo.py', service_id])
-                return f'{service_id} removed', 200
+                delete_process = subprocess.run(['python', 'tasks/delete_repo.py', service_id])
+
+                if delete_process.returncode == 0:
+                    return f'{service_id} removed', 200
+                else:
+                    return 'deletion not completed', 500
             else:
                 if os.path.exists(f'services/{service_id}/error.txt'):
                     with open(f'services/{service_id}/error.txt') as f:

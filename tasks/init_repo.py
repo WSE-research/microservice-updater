@@ -25,7 +25,7 @@ def load_repository(url: str, mode: str, port: str, docker_root: str, dockerfile
     else:
         link = '-'.join(url.lower().replace('//', '').split('/')[1:]).replace('.git', '')
 
-    repo_path = f'services/{link}'
+    repo_path = os.path.join('services', link)
 
     # repository already exists
     if os.path.exists(repo_path):
@@ -33,19 +33,24 @@ def load_repository(url: str, mode: str, port: str, docker_root: str, dockerfile
 
     if mode != 'dockerfile':
         # clone repository
-        Repo.clone_from(url, repo_path)
+        repo = Repo.clone_from(url, repo_path)
+
+        # initialize all submodules
+        for submodule in repo.submodules:
+            submodule.update()
     else:
         os.mkdir(repo_path)
 
+    # add all optional files to repository
     for file in files:
-        file_path = f'{repo_path}/{file.replace("..", ".")}'
+        file_path = os.path.join(repo_path, file.replace("..", "."))
 
         os.makedirs(os.path.dirname(file_path), exist_ok=True)
 
         with open(file_path, 'w') as f:
             f.write(files[file])
 
-    with sqlite3.connect('services/services.db') as db:
+    with sqlite3.connect(os.path.join('services', 'services.db')) as db:
         cursor = db.cursor()
 
         # store configuration in SQLite db
