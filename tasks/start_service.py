@@ -22,7 +22,7 @@ def start_service(service_id: str, mode: str, db, cursor, port, dockerfile, tag)
     if '.env' in os.listdir():
         # read environment variables
         with open('.env') as f:
-            env = f.readlines()
+            env = [line.replace('\n', '') for line in f.readlines()]
     else:
         env = None
 
