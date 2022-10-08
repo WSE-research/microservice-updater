@@ -5,7 +5,7 @@ colorama==0.4.5
 docker==6.0.0
 Flask==2.2.2
 gitdb==4.0.9
-GitPython==3.1.27
+GitPython==3.1.28
 idna==3.4
 itsdangerous==2.1.2
 Jinja2==3.1.2
