@@ -5,17 +5,21 @@ from service_config.config import modes, check_ports
 from tasks.init_repo import load_repository
 from tasks.exceptions import RepositoryAlreadyExistsException
 import subprocess
-import sys
 import json
 from git import GitCommandError
+from base64 import b64encode
+import logging
 
 # create directory for service repositories
 if 'services' not in os.listdir():
     os.mkdir('services')
 
 if 'api-keys.json' not in os.listdir():
-    print('api-keys.json missing')
-    sys.exit(-1)
+    logging.warning('No API keys provided. Generating random key...')
+
+    keys = [b64encode(os.urandom(16)).decode()]
+    with open('api-keys.json', 'w') as api_keys:
+        json.dump(keys, api_keys)
 else:
     with open('api-keys.json') as file:
         keys = json.load(file)
@@ -32,6 +36,12 @@ app = Flask(__name__)
 
 
 def valid(docker_mode: str):
+    """
+    Check proper configuration for selected docker mode
+
+    :param docker_mode: docker mode name
+    :return: True, if all needed parameters are provided for the given docker_mode, otherwise False
+    """
     if docker_mode == 'docker':
         return 'port' in request.json
     elif docker_mode == 'dockerfile':
@@ -48,10 +58,12 @@ def update_service(service_id: str):
     :param service_id: id of the requested service
     :return: GET - information about the service, POST - initialize update, DELETE - remove a service
     """
-    if request.content_type != 'application/json':
+    if request.method != 'GET' and request.content_type != 'application/json':
+        logging.warning('Missing JSON payload')
         return 'JSON payload expected', 400
 
     if 'API-KEY' not in request.json or request.json['API-KEY'] not in keys:
+        logging.warning('Invalid API key provided or missing')
         return 'valid API-KEY required', 400
 
     with sqlite3.connect('services/services.db') as service_db:
@@ -65,6 +77,7 @@ def update_service(service_id: str):
 
             # service update requested
             if (method := request.method) == 'POST':
+                logging.info(f'Updating {service_id}...')
                 files = request.json['files'] if 'files' in request.json else {}
 
                 # start background task to update the service
@@ -76,8 +89,10 @@ def update_service(service_id: str):
                 if delete_process.returncode == 0:
                     return f'{service_id} removed', 200
                 else:
+                    logging.error(f'deletion of {service_id} failed')
                     return 'deletion not completed', 500
             else:
+                logging.info(f'Fetching state of {service_id}...')
                 if os.path.exists(f'services/{service_id}/error.txt'):
                     with open(f'services/{service_id}/error.txt') as f:
                         return jsonify({
@@ -88,6 +103,7 @@ def update_service(service_id: str):
                     return jsonify({'id': service_id, 'errors': None}), 200
         # service does not exist
         else:
+            logging.warning(f'Service {service_id} not found.')
             return f'{service_id} not found', 404
 
 
@@ -99,6 +115,7 @@ def manage_services():
     :return: GET - list of all service ids, POST - service id for a new service
     """
     if request.method == 'GET':
+        logging.info('Requesting services...')
         output = os.listdir('services')
         output.remove('services.db')
         return jsonify(output), 200
@@ -111,6 +128,7 @@ def manage_services():
             data = request.json
 
             if 'API-KEY' not in data or data['API-KEY'] not in keys:
+                logging.warning('API key invalid or missing!')
                 return 'valid API-KEY required', 400
 
             # load git clone URL and initialization mode
@@ -123,6 +141,7 @@ def manage_services():
 
             # mode "docker" requires external port mapping
             if mode in ['docker', 'dockerfile'] and not valid(mode):
+                logging.warning(f'Invalid configuration for mode {mode}')
                 return 'missing parameters', 400
             elif mode in ['docker', 'dockerfile']:
                 image = data['image'] if mode == 'dockerfile' else ''
@@ -133,6 +152,7 @@ def manage_services():
                     port = data['port']
                 # invalid format
                 else:
+                    logging.warning('Invalid port mapping!')
                     return 'invalid port mapping', 400
 
             # repository relative directory containing the Dockerfile or docker-compose.yml
@@ -140,6 +160,7 @@ def manage_services():
 
             # requested mode not supported
             if mode not in modes:
+                logging.warning(f'Unsupported mode selected: {mode}')
                 return 'unsupported mode', 400
 
             try:
@@ -150,12 +171,15 @@ def manage_services():
                 subprocess.Popen(['python', 'tasks/start_service.py', service_id, mode, docker_root, port, image, tag])
             # service already existing
             except RepositoryAlreadyExistsException:
+                logging.error(f'service already exists!')
                 return 'Service already existing', 400
             # Git clone failed
             except GitCommandError as e:
+                logging.error('Cloning repository failed!')
                 return jsonify({'error': e.stderr}), 400
         # Missing arguments in JSON payload
-        except KeyError:
+        except KeyError as e:
+            logging.error(f'Needed parameters not provided! {e}')
             return 'Missing argument', 400
 
         return jsonify({'id': service_id, 'state': 'CREATED'}), 200

@@ -7,6 +7,7 @@ import subprocess
 from start_service import start_service
 import docker
 from docker.errors import NotFound
+import logging
 
 
 def stop_service(docker_mode: str, s_id: str):
@@ -21,15 +22,17 @@ def stop_service(docker_mode: str, s_id: str):
         docker_client = docker.from_env()
 
         try:
+            logging.info(f'Stopping container {s_id}')
             # get, stop and remove container
             container = docker_client.containers.get(s_id)
             container.stop()
             container.remove()
         # container doesn't exist
         except NotFound:
-            pass
+            logging.warning(f'Container {s_id} not found!')
     # docker-compose used
     elif docker_mode == 'docker-compose':
+        logging.info('Stopping containers with docker-compose')
         subprocess.run(['docker-compose', 'down'])
 
 

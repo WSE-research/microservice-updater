@@ -1,3 +1,5 @@
+import logging
+
 from git import Repo
 import sqlite3
 from tasks.exceptions import RepositoryAlreadyExistsException
@@ -33,12 +35,14 @@ def load_repository(url: str, mode: str, port: str, docker_root: str, dockerfile
 
     if mode != 'dockerfile':
         # clone repository
+        logging.info(f'Cloning repository {url}...')
         repo = Repo.clone_from(url, repo_path)
 
         # initialize all submodules
         for submodule in repo.submodules:
             submodule.update()
     else:
+        logging.info(f'Creating directory {link}')
         os.mkdir(repo_path)
 
     # add all optional files to repository
@@ -51,6 +55,7 @@ def load_repository(url: str, mode: str, port: str, docker_root: str, dockerfile
             f.write(files[file])
 
     with sqlite3.connect(os.path.join('services', 'services.db')) as db:
+        logging.info(f'Registration of service {link}...')
         cursor = db.cursor()
 
         # store configuration in SQLite db

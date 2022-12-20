@@ -3,6 +3,7 @@ import os
 import sqlite3
 import subprocess
 import docker
+import logging
 from docker.errors import APIError, BuildError, ImageNotFound
 
 
@@ -35,9 +36,11 @@ def start_service(service_id: str, mode: str, db, cursor, port, dockerfile, tag)
             # get ports
             ex_port, in_port = port.split(':')
 
+            logging.info('Building local Dockerfile...')
             # build docker image
             image, _ = docker_client.images.build(path='.', tag=service_id, rm=True)
 
+            logging.info('Starting container from local Dockerfile')
             # start container
             docker_client.containers.run(f'{service_id}:latest', detach=True, ports={int(in_port): int(ex_port)},
                                          name=service_id, restart_policy={'Name': 'always'}, environment=env)
@@ -46,6 +49,8 @@ def start_service(service_id: str, mode: str, db, cursor, port, dockerfile, tag)
             db.commit()
         # image build failed
         except (APIError, BuildError) as e:
+            logging.error('Build process failed!')
+            logging.error(e.explanation if e is APIError else e.msg)
             # write error message
             with open('error.txt', 'w') as f:
                 f.write(e.explanation if e is APIError else e.msg)
@@ -58,15 +63,19 @@ def start_service(service_id: str, mode: str, db, cursor, port, dockerfile, tag)
     elif mode == 'docker-compose':
         # build docker images
         try:
+            logging.info('Build from docker-compose...')
             # build docker containers
             subprocess.run(['docker-compose', 'build'], check=True, capture_output=True)
 
+            logging.info('Start from docker-compose...')
             # start services
             subprocess.run(['docker-compose', 'up', '-d'])
             cursor.execute('UPDATE repos SET state = \'RUNNING\' WHERE id = ?', (service_id,))
             db.commit()
         # build failed
         except subprocess.CalledProcessError as e:
+            logging.error('Build process failed!')
+            logging.error(e.stderr)
             # write error message
             with open('error.txt', 'wb') as f:
                 f.write(e.stderr)
@@ -84,8 +93,11 @@ def start_service(service_id: str, mode: str, db, cursor, port, dockerfile, tag)
             image_name = f'{dockerfile}:{tag}'
             ex_port, in_port = port.split(':')
 
+            logging.info('Pulling docker image...')
             # pull image and start container
             docker_client.images.pull(dockerfile, tag)
+
+            logging.info('Start container with pulled image...')
             docker_client.containers.run(image_name, detach=True, tty=True, ports={int(in_port): int(ex_port)},
                                          name=service_id, restart_policy={'Name': 'always'}, environment=env)
 
@@ -93,6 +105,8 @@ def start_service(service_id: str, mode: str, db, cursor, port, dockerfile, tag)
             db.commit()
         # image pull failed
         except (APIError, ImageNotFound) as e:
+            logging.error('docke pull failed!')
+            logging.error(e)
             # write error message
             with open('error.txt', 'w') as f:
                 f.write(e.explanation)
