@@ -53,6 +53,13 @@ The API provides the following endpoints:
   in all `UPDATE` requests, otherwise they get lost.
 
 * `https://$HOST:$SERVICE_PORT/service/$SERVICE_ID`
+  * GET-Request: Get the current state of the registration process. Response:
+    ```json
+    {
+     "id": "$SERVICE_ID",
+     "errors": "ERROR_MESSAGE"
+    }
+    ```
   * POST-Request: initializes an update of `$SERVICE_ID`
     ```json
     {
