@@ -62,7 +62,7 @@ def update_service(service_id: str):
         logging.warning('Missing JSON payload')
         return 'JSON payload expected', 400
 
-    if request.method != 'GET' and 'API-KEY' not in request.json or request.json['API-KEY'] not in keys:
+    if request.method != 'GET' and ('API-KEY' not in request.json or request.json['API-KEY'] not in keys):
         logging.warning('Invalid API key provided or missing')
         return 'valid API-KEY required', 400
 
