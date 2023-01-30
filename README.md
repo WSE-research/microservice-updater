@@ -51,7 +51,15 @@ The API provides the following endpoints:
   
   **Remark**: If custom files have been provided via the `files` parameter, they have to be submitted
   in all `UPDATE` requests, otherwise they get lost.
-
+  
+  If the registration is successful, you'll receive the following response:
+  ```json
+  {
+    "id": "$SERVICE_ID", 
+    "state": "CREATED"
+  }
+  ```
+  You need `$SERVICE_ID` to access the service state and trigger updates or deletions.
 * `/service/$SERVICE_ID`
   * GET-Request: Get the current state of the registration process. Response:
     ```json
