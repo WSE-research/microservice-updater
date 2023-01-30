@@ -5,9 +5,9 @@ automatically and rebuilds related Docker services. Therefore, a simple
 REST-API is provided.
 
 ## Installation
-Before starting the service it is necessary to create the file `api-keys.json`
+Before starting the service create the file `api-keys.json`
 in the project's root directory. There you have to add the API keys as a
-list of strings.
+list of strings. If this file isn't provided, the service will generate a random key.
 
 The service requires a valid SSL certificate. Please replace the files in
 the `ssl` directory.
@@ -24,7 +24,7 @@ nginx service on localhost is provided.
 
 ## API endpoints
 The API provides the following endpoints:
-* `https://$HOST:$SERVICE_PORT/service`
+* `/service`
   * GET-Request: provides a list of all monitored git repositories
   * POST-Request: registers a new docker service to monitor
     ```json
@@ -52,7 +52,7 @@ The API provides the following endpoints:
   **Remark**: If custom files have been provided via the `files` parameter, they have to be submitted
   in all `UPDATE` requests, otherwise they get lost.
 
-* `https://$HOST:$SERVICE_PORT/service/$SERVICE_ID`
+* `/service/$SERVICE_ID`
   * GET-Request: Get the current state of the registration process. Response:
     ```json
     {
@@ -69,6 +69,8 @@ The API provides the following endpoints:
       }
     }
     ```
+    **Remark**: The docker service will be rebuilded and restarted from scratch. All data will be lost!
+    
   * DELETE-Request: stop and delete `$SERVICE_ID`
     ```json
     {
