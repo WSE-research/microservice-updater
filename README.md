@@ -53,19 +53,17 @@ The API provides the following endpoints:
   You can change the configuration by providing custom files. Therefor, you need to set the `files`
   parameter in the `POST` request body. To access the data you provide a `KEY-VALUE-PAIR` in the `files`
   value. The `KEY` has to be the relative path from the root of the repository to the file you want to
-  insert in the registered service. The `VALUE` has to be the path where you want to place the file
-  inside the service.
+  insert in the registered service. The `VALUE` has to be the content you want to store inside the service.
   
   #### EXAMPLE
   ```json
   {
     "files": {
-      "subdir/data.txt": "/config/data.conf"
+      "/config/data.conf": "SETTING1=5"
     }
   }
   ```
-  The updater copies the `data.txt` file in the subdirectory `subdir` and inserts it into the `/config`
-  directory as `data.conf`.
+  The updater creates the `data.conf` file in the subdirectory `config` and inserts the content `SETTING1=5`.
   
   **Remark**: If custom files have been provided via the `files` parameter, they have to be submitted
   in all `UPDATE` requests, otherwise they get lost.
