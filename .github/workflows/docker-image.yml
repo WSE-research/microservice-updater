@@ -1,8 +1,6 @@
 name: Docker Image CI
 
-on:
-  push:
-    branches: [ master ]
+on: push
 
 jobs:
   build:
@@ -13,14 +11,23 @@ jobs:
     - name: Build the Docker image
       run: docker build . --file Dockerfile --tag msu:latest
     - name: Docker Login
+      if: startsWith(github.ref, 'refs/tags/')
       uses: docker/login-action@v2
       with:
         username: ${{ secrets.DOCKER_USER }}
         password: ${{ secrets.DOCKER_PASSWORD }}
-    - name: Tag docker image
+    - name: Tag latest docker image
+      if: startsWith(github.ref, 'refs/tags/')
       run: docker tag msu:latest bigoli98/microservice-updater:latest
-    - name: Push docker image
+    - name: Tag docker image version
+      if: startsWith(github.ref, 'refs/tags/')
+      run: docker tag msu:latest "bigoli98/microservice-updater:${{ github.ref_name }}"
+    - name: Push latest docker image
+      if: startsWith(github.ref, 'refs/tags/')
       run: docker push bigoli98/microservice-updater:latest
+    - name: Push tagged version image
+      if: startsWith(github.ref, 'refs/tags/')
+      run: docker push "bigoli98/microservice-updater:${{ github.ref_name }}"
     - name: Init update
       uses: MindMaster98/docker-service-updater@v0.1.5
       with:
