@@ -28,8 +28,3 @@ jobs:
     - name: Push tagged version image
       if: startsWith(github.ref, 'refs/tags/')
       run: docker push "bigoli98/microservice-updater:${{ github.ref_name }}"
-    - name: Init update
-      uses: MindMaster98/docker-service-updater@v0.1.5
-      with:
-        updater_host: ${{ secrets.UPDATER_HOST }}
-        api_key: ${{ secrets.API_KEY }}
