@@ -5,9 +5,10 @@ import subprocess
 import docker
 import logging
 from docker.errors import APIError, BuildError, ImageNotFound
+from json import loads
 
 
-def start_service(service_id: str, mode: str, db, cursor, port, dockerfile, tag):
+def start_service(service_id: str, mode: str, db, cursor, port, dockerfile, tag, volumes: list[str]):
     """
     Builds a docker image and starts a corresponding container
 
@@ -18,6 +19,7 @@ def start_service(service_id: str, mode: str, db, cursor, port, dockerfile, tag)
     :param port: provided port mapping
     :param dockerfile: image from dockerhub
     :param tag: tag of dockerfile
+    :param volumes: list of volume mappings
     """
     # service has an environment file
     if '.env' in os.listdir():
@@ -43,7 +45,8 @@ def start_service(service_id: str, mode: str, db, cursor, port, dockerfile, tag)
             logging.info('Starting container from local Dockerfile')
             # start container
             docker_client.containers.run(f'{service_id}:latest', detach=True, ports={int(in_port): int(ex_port)},
-                                         name=service_id, restart_policy={'Name': 'always'}, environment=env)
+                                         name=service_id, restart_policy={'Name': 'always'}, environment=env,
+                                         volumes=volumes)
 
             cursor.execute('UPDATE repos SET state = \'RUNNING\' WHERE id = ?', (service_id,))
             db.commit()
@@ -99,7 +102,8 @@ def start_service(service_id: str, mode: str, db, cursor, port, dockerfile, tag)
 
             logging.info('Start container with pulled image...')
             docker_client.containers.run(image_name, detach=True, tty=True, ports={int(in_port): int(ex_port)},
-                                         name=service_id, restart_policy={'Name': 'always'}, environment=env)
+                                         name=service_id, restart_policy={'Name': 'always'}, environment=env,
+                                         volumes=volumes)
 
             cursor.execute('UPDATE repos SET state = \'RUNNING\' WHERE id = ?', (service_id,))
             db.commit()
@@ -136,6 +140,8 @@ if __name__ == '__main__':
         docker_file = None
         docker_tag = None
 
+    volume_mapping = loads(sys.argv[7])
+
     base_path = os.getcwd()
 
     with sqlite3.connect(os.path.join('services', 'services.db')) as database:
@@ -146,6 +152,6 @@ if __name__ == '__main__':
         db_cursor.execute('SELECT url FROM repos WHERE id = ?', (s_id,))
 
         if fetch_url := db_cursor.fetchone():
-            start_service(s_id, docker_mode, database, db_cursor, p, docker_file, docker_tag)
+            start_service(s_id, docker_mode, database, db_cursor, p, docker_file, docker_tag, volume_mapping)
 
         os.chdir(base_path)

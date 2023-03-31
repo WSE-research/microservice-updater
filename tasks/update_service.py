@@ -46,6 +46,8 @@ if __name__ == '__main__':
     else:
         files = {}
 
+    volumes = loads(sys.argv[3])
+
     with sqlite3.connect('services/services.db') as db:
         cursor = db.cursor()
 
@@ -78,6 +80,6 @@ if __name__ == '__main__':
 
             # build new images and containers
             stop_service(mode, service_id)
-            start_service(service_id, mode, db, cursor, service[2], service[3], service[4])
+            start_service(service_id, mode, db, cursor, service[2], service[3], service[4], volumes)
 
             os.chdir(base_dir)

@@ -38,9 +38,14 @@ The API provides the following endpoints:
       "tag": "dockerhub image tag (optional)",
       "files": {
         "path_and_file_name": "file content"
-      }
+      },
+      "volumes": [
+        "host_path:container_path"
+      ]
     }
     ```
+    | WARNING: Volumes have to be provided at each update process. <br/>Otherwise, the container doesn't mount the volumes after recreation! |
+    |----------------------------------------------------------------------------------------------------------------------------------------|
     The service supports multiple ways to monitor git repositories:
     1. **Git repository with single Dockerfile**: The user has to specify the
     parameters `url` and `port`. The `mode` has to be `docker`.

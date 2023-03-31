@@ -3,7 +3,7 @@ import os
 import sqlite3
 from service_config.config import modes, check_ports
 from tasks.init_repo import load_repository
-from tasks.exceptions import RepositoryAlreadyExistsException
+from tasks.exceptions import *
 import subprocess
 import json
 from git import GitCommandError
@@ -33,6 +33,13 @@ with sqlite3.connect('services/services.db') as db:
     db.commit()
 
 app = Flask(__name__)
+
+
+def check_volumes(volumes):
+    if type(volumes) is not list:
+        raise InvalidVolumeMappingException('Volume mapping list expected')
+    if any([len(volume.split(':')) != 2 for volume in volumes]):
+        raise InvalidVolumeMappingException('Invalid volume mapping format provided')
 
 
 def valid(docker_mode: str):
@@ -78,11 +85,21 @@ def update_service(service_id: str):
             # service update requested
             if (method := request.method) == 'POST':
                 logging.info(f'Updating {service_id}...')
-                files = request.json['files'] if 'files' in request.json else {}
 
-                # start background task to update the service
-                subprocess.Popen(['python', 'tasks/update_service.py', service_id, json.dumps(files)])
-                return 'Update initiated', 200
+                payload = request.json
+
+                files = payload['files'] if 'files' in payload else {}
+                volumes = payload['volumes'] if 'volumes' in payload else []
+
+                try:
+                    check_volumes(volumes)
+
+                    # start background task to update the service
+                    subprocess.Popen(['python', 'tasks/update_service.py', service_id, json.dumps(files), json.dumps(volumes)])
+                    return 'Update initiated', 200
+                except InvalidVolumeMappingException as e:
+                    logging.error(f'Invalid volume mapping provided: {e}')
+                    return e.message, 400
             elif method == 'DELETE':
                 delete_process = subprocess.run(['python', 'tasks/delete_repo.py', service_id])
 
@@ -134,10 +151,13 @@ def manage_services():
             # load git clone URL and initialization mode
             url = data['url'] if 'url' in data else ''
             files = data['files'] if 'files' in data else {}
+            volumes = data['volumes'] if 'volumes' in data else []
             mode = data['mode']
             port = ''
             image = ''
             tag = ''
+
+            check_volumes(volumes)
 
             # mode "docker" requires external port mapping
             if mode in ['docker', 'dockerfile'] and not valid(mode):
@@ -168,7 +188,8 @@ def manage_services():
                 service_id = load_repository(url, mode, port, docker_root, image, tag, files)
 
                 # start new service
-                subprocess.Popen(['python', 'tasks/start_service.py', service_id, mode, docker_root, port, image, tag])
+                subprocess.Popen(['python', 'tasks/start_service.py', service_id, mode, docker_root, port, image, tag,
+                                  json.dumps(volumes)])
             # service already existing
             except RepositoryAlreadyExistsException:
                 logging.error(f'service already exists!')
@@ -181,6 +202,9 @@ def manage_services():
         except KeyError as e:
             logging.error(f'Needed parameters not provided! {e}')
             return 'Missing argument', 400
+        except InvalidVolumeMappingException as e:
+            logging.error(f'Invalid volume mapping provided: {e}')
+            return e.message, 400
 
         return jsonify({'id': service_id, 'state': 'CREATED'}), 200
 
