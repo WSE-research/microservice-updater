@@ -65,14 +65,14 @@ if __name__ == '__main__':
                 repo.head.reset('--hard')
                 repo.remote('origin').pull()
 
-                # update custom files
-                for file in files:
-                    file_path = f'services/{service_id}/{file.replace("..", ".")}'
+            # update custom files
+            for file in files:
+                file_path = f'services/{service_id}/{file.replace("..", ".")}'
 
-                    os.makedirs(os.path.dirname(file_path), exist_ok=True)
+                os.makedirs(os.path.dirname(file_path), exist_ok=True)
                     
-                    with open(file_path, 'w') as f:
-                        f.write(files[file])
+                with open(file_path, 'w') as f:
+                    f.write(files[file])
 
             os.chdir(f'services/{service_id}/{service[0]}')
 
