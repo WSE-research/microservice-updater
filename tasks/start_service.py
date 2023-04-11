@@ -29,22 +29,25 @@ def start_service(service_id: str, mode: str, db, cursor, port, dockerfile, tag,
     else:
         env = None
 
+    ports = {}
+
+    for port_mapping in port.split(','):
+        ex_port, in_port = port_mapping.split(':')
+        ports[in_port] = ex_port
+
     # docker image from git repository
     if mode == 'docker':
         docker_client = docker.from_env()
 
         # build docker image
         try:
-            # get ports
-            ex_port, in_port = port.split(':')
-
             logging.info('Building local Dockerfile...')
             # build docker image
             image, _ = docker_client.images.build(path='.', tag=service_id, rm=True)
 
             logging.info('Starting container from local Dockerfile')
             # start container
-            docker_client.containers.run(f'{service_id}:latest', detach=True, ports={int(in_port): int(ex_port)},
+            docker_client.containers.run(f'{service_id}:latest', detach=True, ports=ports,
                                          name=service_id, restart_policy={'Name': 'always'}, environment=env,
                                          volumes=volumes)
 
@@ -94,14 +97,13 @@ def start_service(service_id: str, mode: str, db, cursor, port, dockerfile, tag,
         try:
             # set image name and port mapping
             image_name = f'{dockerfile}:{tag}'
-            ex_port, in_port = port.split(':')
 
             logging.info('Pulling docker image...')
             # pull image and start container
             docker_client.images.pull(dockerfile, tag)
 
             logging.info('Start container with pulled image...')
-            docker_client.containers.run(image_name, detach=True, tty=True, ports={int(in_port): int(ex_port)},
+            docker_client.containers.run(image_name, detach=True, tty=True, ports=ports,
                                          name=service_id, restart_policy={'Name': 'always'}, environment=env,
                                          volumes=volumes)
 

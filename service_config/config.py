@@ -8,4 +8,4 @@ modes = [
 
 
 def check_ports(port: str):
-    return re.match(r'^\d+:\d+$', port)
+    return all([re.match(r'^\d+:\d+$', port_mapping) for port_mapping in port.split(',')])

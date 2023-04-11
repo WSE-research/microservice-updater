@@ -33,7 +33,7 @@ The API provides the following endpoints:
       "url": "git clone URL (optional)",
       "mode": "supported docker mode",
       "docker_root": "path to Dockerfile or docker-compose.yml (optional)",
-      "port": "port mapping (optional)",
+      "port": "port mapping (eg. '80:80' or '80:80,443:443') (optional)",
       "image": "dockerhub image (optional)",
       "tag": "dockerhub image tag (optional)",
       "files": {
