@@ -95,7 +95,8 @@ def update_service(service_id: str):
                     check_volumes(volumes)
 
                     # start background task to update the service
-                    subprocess.Popen(['python', 'tasks/update_service.py', service_id, json.dumps(files), json.dumps(volumes)])
+                    subprocess.Popen(['python', 'tasks/update_service.py', service_id, json.dumps(files),
+                                      json.dumps(volumes)])
                     return 'Update initiated', 200
                 except InvalidVolumeMappingException as e:
                     logging.error(f'Invalid volume mapping provided: {e}')
@@ -114,10 +115,11 @@ def update_service(service_id: str):
                     with open(f'services/{service_id}/error.txt') as f:
                         return jsonify({
                             'id': service_id,
+                            'state': docker_state,
                             'errors': f.read()
                         }), 200
                 else:
-                    return jsonify({'id': service_id, 'errors': None}), 200
+                    return jsonify({'id': service_id, 'state': docker_state, 'errors': None}), 200
         # service does not exist
         else:
             logging.warning(f'Service {service_id} not found.')
