@@ -30,7 +30,7 @@ The API provides the following endpoints:
     ```json
     {
       "API-KEY": "a49bc0...",
-      "url": "git clone URL (optional)",
+      "url": "remote URL of git repository (optional)",
       "mode": "supported docker mode",
       "docker_root": "path to Dockerfile or docker-compose.yml (optional)",
       "port": "port mapping (eg. '80:80' or '80:80,443:443') (optional)",
