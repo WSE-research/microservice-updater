@@ -9,18 +9,43 @@ Before starting the service create the file `api-keys.json`
 in the project's root directory. There you have to add the API keys as a
 list of strings. If this file isn't provided, the service will generate a random key.
 
-The service requires a valid SSL certificate. Please replace the files in
-the `ssl` directory.
+The service requires a valid SSL certificate. Please edit the `.env` file
+to provide the path to your certificate. `SSL_DIR` is the path to 
+your certificate, while `CERT_FILE` and `KEY_FILE` are the names of the
+certificate and the key.
 
 Run `docker-compose up -d` to start the service. You can change the external
 port of this service by editing the variable `SERVICE_PORT` in the `.env`
 file.
 
 ## Automatic registration of services
-In the directory `service_config` is a tool `init_services` that allows
-a user to register a list of services at his Microservice Updater. The configuration
-has to be done with the `service_config.json`, an example for registering a
-nginx service on localhost is provided.
+To register a service at the Microservice updater, use the API endpoint `/service`.
+The following example provides the configuration to start a nginx server
+for HTTP/HTTPS connections. This service can be used to deploy GitHub projects
+automatically with the [docker-service-updater](https://github.com/MindMaster98/docker-service-updater)
+GitHub Action.
+
+```json
+{
+  "API-KEY": "<YOUR-KEY>",
+  "mode": "dockerfile",
+  "image": "nginx",
+  "tag": "alpine",
+  "port": "8080:80,8443:443"
+}
+```
+
+```shell
+curl --location 'http://localhost:9000/service' \
+--header 'Content-Type: application/json' \
+--data '{
+    "mode": "dockerfile",
+    "image": "nginx",
+    "tag": "alpine",
+    "port": "8080:80,8444:443",
+    "API-KEY": "<YOUR-KEY>"
+}'
+```
 
 ## API endpoints
 The API provides the following endpoints:
@@ -30,7 +55,7 @@ The API provides the following endpoints:
     ```json
     {
       "API-KEY": "a49bc0...",
-      "url": "git clone URL (optional)",
+      "url": "URL to clone your Git repository (optional)",
       "mode": "supported docker mode",
       "docker_root": "path to Dockerfile or docker-compose.yml (optional)",
       "port": "port mapping (eg. '80:80' or '80:80,443:443') (optional)",
@@ -80,7 +105,9 @@ The API provides the following endpoints:
     "state": "CREATED"
   }
   ```
-  You need `$SERVICE_ID` to access the service state and trigger updates or deletions.
+  You need `$SERVICE_ID` to access the service state and trigger updates or deletions. As the service
+  runs a background task to start the container, you don't get a failure message during the registration.
+  Therefor, verify the service state via the API.
 * `/service/$SERVICE_ID`
   * GET-Request: Get the current state of the registration process. Response:
     ```json

@@ -4,8 +4,12 @@ services:
     restart: always
     build:
       context: .
+    environment:
+      - KEY_FILE=$KEY_FILE
+      - CERT_FILE=$CERT_FILE
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - $SSL_DIR:/ssl
       - services:/services
     ports:
       - "$SERVICE_PORT:9000"

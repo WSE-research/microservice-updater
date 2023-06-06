@@ -53,6 +53,10 @@ def start_service(service_id: str, mode: str, db, cursor, port, dockerfile, tag,
 
             cursor.execute('UPDATE repos SET state = \'RUNNING\' WHERE id = ?', (service_id,))
             db.commit()
+
+            with open('error.txt', 'w') as f:
+                f.write('')
+
         # image build failed
         except (APIError, BuildError) as e:
             logging.error('Build process failed!')
@@ -78,6 +82,9 @@ def start_service(service_id: str, mode: str, db, cursor, port, dockerfile, tag,
             subprocess.run(['docker-compose', 'up', '-d'])
             cursor.execute('UPDATE repos SET state = \'RUNNING\' WHERE id = ?', (service_id,))
             db.commit()
+
+            with open('error.txt', 'w') as f:
+                f.write('')
         # build failed
         except subprocess.CalledProcessError as e:
             logging.error('Build process failed!')
@@ -109,6 +116,9 @@ def start_service(service_id: str, mode: str, db, cursor, port, dockerfile, tag,
 
             cursor.execute('UPDATE repos SET state = \'RUNNING\' WHERE id = ?', (service_id,))
             db.commit()
+
+            with open('error.txt', 'w') as f:
+                f.write('')
         # image pull failed
         except (APIError, ImageNotFound) as e:
             logging.error('docke pull failed!')
