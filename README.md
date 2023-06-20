@@ -6,7 +6,7 @@ REST-API is provided.
 
 ## Installation
 Before starting the service create the file `api-keys.json`
-in the project's root directory. There you have to add the API keys as a
+in the projects' `services` subdirectory. There you have to add the API keys as a
 list of strings. If this file isn't provided, the service will generate a random key.
 
 The service requires a valid SSL certificate. Please edit the `.env` file

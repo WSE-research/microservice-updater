@@ -1,7 +1,7 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, redirect, url_for
 import os
 import sqlite3
-from service_config.config import modes, check_ports
+from service_config.config import modes, check_ports, regexp, InvalidPortMappingException, PortAlreadyUsedException
 from tasks.init_repo import load_repository
 from tasks.exceptions import *
 import subprocess
@@ -14,14 +14,14 @@ import logging
 if 'services' not in os.listdir():
     os.mkdir('services')
 
-if 'api-keys.json' not in os.listdir():
+if 'api-keys.json' not in os.listdir('services'):
     logging.warning('No API keys provided. Generating random key...')
 
     keys = [b64encode(os.urandom(16)).decode()]
-    with open('api-keys.json', 'w') as api_keys:
+    with open('services/api-keys.json', 'w') as api_keys:
         json.dump(keys, api_keys)
 else:
-    with open('api-keys.json') as file:
+    with open('services/api-keys.json') as file:
         keys = json.load(file)
 
 # initialize database for service management
@@ -126,6 +126,11 @@ def update_service(service_id: str):
             return f'{service_id} not found', 404
 
 
+@app.route('/service/', methods=['GET', 'POST'])
+def redirect_to_service():
+    return redirect(url_for('manage_services'), code=307)
+
+
 @app.route('/service', methods=['GET', 'POST'])
 def manage_services():
     """
@@ -137,7 +142,8 @@ def manage_services():
         logging.info('Requesting services...')
         output = os.listdir('services')
         output.remove('services.db')
-        return jsonify(output), 200
+        output.remove('api-keys.json')
+        return jsonify(sorted(output)), 200
     else:
         # backend requires JSON data
         if request.content_type != 'application/json':
@@ -169,13 +175,16 @@ def manage_services():
                 image = data['image'] if mode == 'dockerfile' else ''
                 tag = data['tag'] if mode == 'dockerfile' else ''
 
-                # check port mapping format
-                if check_ports(data['port']):
-                    port = data['port']
-                # invalid format
-                else:
-                    logging.warning('Invalid port mapping!')
-                    return 'invalid port mapping', 400
+                with sqlite3.connect('services/services.db') as temp_db:
+                    temp_db.create_function('REGEXP', 2, regexp)
+
+                    try:
+                        # check port mapping format
+                        if check_ports(data['port'], temp_db.cursor()):
+                            port = data['port']
+                    except (InvalidPortMappingException, PortAlreadyUsedException) as e:
+                        logging.warning(e.message)
+                        return e.message, 400
 
             # repository relative directory containing the Dockerfile or docker-compose.yml
             docker_root = data['docker_root'] if 'docker_root' in data else '.'

@@ -1,4 +1,4 @@
 services
 venv
 *.db
-api-keys.json
+services/api-keys.json
