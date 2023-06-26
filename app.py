@@ -175,6 +175,8 @@ def manage_services():
             image = ''
             tag = ''
 
+            volumes.remove('')
+
             check_volumes(volumes)
 
             # mode "docker" requires external port mapping
