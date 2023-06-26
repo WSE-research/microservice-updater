@@ -92,7 +92,9 @@ def update_service(service_id: str):
 
                 files = payload['files'] if 'files' in payload else {}
                 volumes = payload['volumes'] if 'volumes' in payload else []
-                volumes.remove('')
+
+                if '' in volumes:
+                    volumes.remove('')
 
                 try:
                     check_volumes(volumes)
@@ -175,7 +177,8 @@ def manage_services():
             image = ''
             tag = ''
 
-            volumes.remove('')
+            if '' in volumes:
+                volumes.remove('')
 
             check_volumes(volumes)
 
