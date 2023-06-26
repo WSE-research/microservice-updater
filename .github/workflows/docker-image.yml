@@ -18,13 +18,13 @@ jobs:
         password: ${{ secrets.DOCKER_PASSWORD }}
     - name: Tag latest docker image
       if: startsWith(github.ref, 'refs/tags/')
-      run: docker tag msu:latest bigoli98/microservice-updater:latest
+      run: docker tag msu:latest wseresearch/microservice-updater:latest
     - name: Tag docker image version
       if: startsWith(github.ref, 'refs/tags/')
-      run: docker tag msu:latest "bigoli98/microservice-updater:${{ github.ref_name }}"
+      run: docker tag msu:latest "wseresearch/microservice-updater:${{ github.ref_name }}"
     - name: Push latest docker image
       if: startsWith(github.ref, 'refs/tags/')
-      run: docker push bigoli98/microservice-updater:latest
+      run: docker push wseresearch/microservice-updater:latest
     - name: Push tagged version image
       if: startsWith(github.ref, 'refs/tags/')
-      run: docker push "bigoli98/microservice-updater:${{ github.ref_name }}"
+      run: docker push "wseresearch/microservice-updater:${{ github.ref_name }}"

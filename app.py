@@ -9,6 +9,8 @@ import json
 from git import GitCommandError
 from base64 import b64encode
 import logging
+import docker
+from docker.errors import NotFound
 
 # create directory for service repositories
 if 'services' not in os.listdir():
@@ -80,7 +82,7 @@ def update_service(service_id: str):
 
         # service exists
         if service_data := service_cursor.fetchone():
-            _, url, mode, docker_state, port, docker_root, image, tag = service_data
+            _, url, mode, _, port, docker_root, image, tag = service_data
 
             # service update requested
             if (method := request.method) == 'POST':
@@ -90,6 +92,7 @@ def update_service(service_id: str):
 
                 files = payload['files'] if 'files' in payload else {}
                 volumes = payload['volumes'] if 'volumes' in payload else []
+                volumes.remove('')
 
                 try:
                     check_volumes(volumes)
@@ -110,16 +113,23 @@ def update_service(service_id: str):
                     logging.error(f'deletion of {service_id} failed')
                     return 'deletion not completed', 500
             else:
+                with open(f'services/{service_id}/error.txt') as f:
+                    errors = f.read()
+
                 logging.info(f'Fetching state of {service_id}...')
-                if os.path.exists(f'services/{service_id}/error.txt'):
-                    with open(f'services/{service_id}/error.txt') as f:
-                        return jsonify({
-                            'id': service_id,
-                            'state': docker_state,
-                            'errors': f.read()
-                        }), 200
-                else:
-                    return jsonify({'id': service_id, 'state': docker_state, 'errors': None}), 200
+                try:
+                    docker_client = docker.from_env()
+                    container = docker_client.containers.get(service_id)
+
+                    docker_state = container.status.upper()
+
+                    return jsonify({
+                        'id': service_id,
+                        'state': docker_state,
+                        'errors': errors
+                    }), 200
+                except NotFound:
+                    return jsonify({'id': service_id, 'state': 'BUILD FAILED', 'errors': errors}), 200
         # service does not exist
         else:
             logging.warning(f'Service {service_id} not found.')
