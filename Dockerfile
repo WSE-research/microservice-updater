@@ -9,4 +9,4 @@ ENV PATH="/venv/bin:$PATH"
 COPY . .
 RUN pip3 install -r requirements.txt
 RUN pip3 install gunicorn docker-compose
-CMD gunicorn -w 8 -b 0.0.0.0:9000 --certfile=ssl/$CERT_FILE --keyfile=ssl/$KEY_FILE app:app
+CMD gunicorn -w 8 -b 0.0.0.0:9000 --certfile=ssl/server.crt --keyfile=ssl/server.key app:app
