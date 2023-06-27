@@ -11,7 +11,7 @@ list of strings. If this file isn't provided, the service will generate a random
 
 The service requires a valid SSL certificate. Please edit the `.env` file
 to provide the path to your certificate. `SSL_DIR` is the path to 
-your certificate, while `CERT_FILE` and `KEY_FILE` are the names of the
+your certificate. `server.crt` and `server.key` are the names of the
 certificate and the key.
 
 Run `docker-compose up -d` to start the service. You can change the external
