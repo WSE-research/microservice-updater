@@ -44,6 +44,11 @@ def check_volumes(volumes):
         raise InvalidVolumeMappingException('Invalid volume mapping format provided')
 
 
+def start_update(service_id: str, files: dict, volumes: list[str]):
+    subprocess.Popen(['python', 'tasks/update_service.py', service_id, json.dumps(files),
+                      json.dumps(volumes)])
+
+
 def valid(docker_mode: str):
     """
     Check proper configuration for selected docker mode
@@ -59,7 +64,7 @@ def valid(docker_mode: str):
         return True
 
 
-@app.route('/service/<string:service_id>', methods=['POST', 'DELETE', 'GET'])
+@app.route('/service/<string:service_id>', methods=['POST', 'DELETE', 'GET', 'PATCH'])
 def update_service(service_id: str):
     """
     Accesses a service
@@ -76,6 +81,8 @@ def update_service(service_id: str):
         return 'valid API-KEY required', 400
 
     with sqlite3.connect('services/services.db') as service_db:
+        service_db.create_function('REGEXP', 2, regexp)
+
         # search service
         service_cursor = service_db.cursor()
         service_cursor.execute('SELECT * FROM repos WHERE id = ?', (service_id,))
@@ -100,8 +107,7 @@ def update_service(service_id: str):
                     check_volumes(volumes)
 
                     # start background task to update the service
-                    subprocess.Popen(['python', 'tasks/update_service.py', service_id, json.dumps(files),
-                                      json.dumps(volumes)])
+                    start_update(service_id, files, volumes)
                     return 'Update initiated', 200
                 except InvalidVolumeMappingException as e:
                     logging.error(f'Invalid volume mapping provided: {e}')
@@ -114,6 +120,29 @@ def update_service(service_id: str):
                 else:
                     logging.error(f'deletion of {service_id} failed')
                     return 'deletion not completed', 500
+            elif method == 'PATCH':
+                payload = request.json
+
+                if 'port' in payload:
+                    try:
+                        check_ports(payload['port'], service_db.cursor())
+                    except InvalidPortMappingException as e:
+                        return e.message, 400
+                    except PortAlreadyUsedException as e:
+                        return e.message, 400
+
+                for param in ['tag', 'port']:
+                    if param in payload:
+                        update_cursor = service_db.cursor()
+                        update_cursor.execute(f'UPDATE repos SET {param} = ? WHERE id = ?',
+                                              (payload[param], service_id))
+                        service_db.commit()
+
+                volumes = payload['volumes'] if 'volumes' in payload else []
+
+                start_update(service_id, {}, volumes)
+
+                return f'service "{service_id}" patched and restarted', 200
             else:
                 with open(f'services/{service_id}/error.txt') as f:
                     errors = f.read()

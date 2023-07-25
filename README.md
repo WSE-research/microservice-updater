@@ -109,14 +109,14 @@ The API provides the following endpoints:
   runs a background task to start the container, you don't get a failure message during the registration.
   Therefor, verify the service state via the API.
 * `/service/$SERVICE_ID`
-  * GET-Request: Get the current state of the registration process. Response:
+  * `GET`-Request: Get the current state of the registration process. Response:
     ```json
     {
      "id": "$SERVICE_ID",
      "errors": "ERROR_MESSAGE"
     }
     ```
-  * POST-Request: initializes an update of `$SERVICE_ID`
+  * `POST`-Request: initializes an update of `$SERVICE_ID`
     ```json
     {
       "API-KEY": "a49bc0...",
@@ -125,9 +125,13 @@ The API provides the following endpoints:
       }
     }
     ```
-    **Remark**: The docker service will be rebuilded and restarted from scratch. All data will be lost!
+    **Remark**: The docker service will be rebuilt and restarted from scratch. All data will be lost!
     
-  * DELETE-Request: stop and delete `$SERVICE_ID`
+  * `PATCH`-Request: Updates the settings of your service. You can change `port` and `tag` of the Docker image.
+    The service will be rebuilt after the application of the changes. If you used `volumes` you need to provide them in
+    the request body again.
+
+  * `DELETE`-Request: stop and delete `$SERVICE_ID`
     ```json
     {
       "API-KEY": "a49bc0..."
