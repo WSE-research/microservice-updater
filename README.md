@@ -10,9 +10,8 @@ in the projects' `services` subdirectory. There you have to add the API keys as 
 list of strings. If this file isn't provided, the service will generate a random key.
 
 The service requires a valid SSL certificate. Please edit the `.env` file
-to provide the path to your certificate. `SSL_DIR` is the path to 
-your certificate. `server.crt` and `server.key` are the names of the
-certificate and the key.
+to provide the path to your certificate. `SSL_CERT_FILE` is the path to 
+your certificate. `SSL_KEY_FILE` is the path to your keyfile of the certificate.
 
 Run `docker-compose up -d` to start the service. You can change the external
 port of this service by editing the variable `SERVICE_PORT` in the `.env`
