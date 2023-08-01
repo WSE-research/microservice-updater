@@ -129,6 +129,13 @@ The API provides the following endpoints:
   * `PATCH`-Request: Updates the settings of your service. You can change `port` and `tag` of the Docker image.
     The service will be rebuilt after the application of the changes. If you used `volumes` you need to provide them in
     the request body again.
+    ```json
+    {
+      "API-KEY": "a49bc0...",
+      "port": "80:80,443:443",
+      "tag": "nightly"
+    }
+    ```
 
   * `DELETE`-Request: stop and delete `$SERVICE_ID`
     ```json
