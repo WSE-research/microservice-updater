@@ -133,12 +133,16 @@ def update_service(service_id: str):
 
                 for param in ['tag', 'port']:
                     if param in payload:
-                        update_cursor = service_db.cursor()
-                        update_cursor.execute(f'UPDATE repos SET {param} = ? WHERE id = ?',
-                                              (payload[param], service_id))
-                        service_db.commit()
+                        if payload[param]:
+                            update_cursor = service_db.cursor()
+                            update_cursor.execute(f'UPDATE repos SET {param} = ? WHERE id = ?',
+                                                  (payload[param], service_id))
+                            service_db.commit()
 
                 volumes = payload['volumes'] if 'volumes' in payload else []
+
+                if '' in volumes:
+                    volumes.remove('')
 
                 start_update(service_id, {}, volumes)
 
