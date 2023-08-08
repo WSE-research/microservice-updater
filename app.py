@@ -184,6 +184,7 @@ def manage_services():
         output = os.listdir('services')
         output.remove('services.db')
         output.remove('api-keys.json')
+        output.remove('.gitkeep')
         return jsonify(sorted(output)), 200
     else:
         # backend requires JSON data
