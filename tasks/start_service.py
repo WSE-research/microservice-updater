@@ -121,7 +121,7 @@ def start_service(service_id: str, mode: str, db, cursor, port, dockerfile, tag,
                 f.write('')
         # image pull failed
         except (APIError, ImageNotFound) as e:
-            logging.error('docke pull failed!')
+            logging.error('docker pull failed!')
             logging.error(e)
             # write error message
             with open('error.txt', 'w') as f:
