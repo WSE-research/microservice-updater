@@ -59,7 +59,8 @@ def valid(docker_mode: str):
     if docker_mode == 'docker':
         return 'port' in request.json
     elif docker_mode == 'dockerfile':
-        return 'port' in request.json and 'image' in request.json and 'tag' in request.json
+        return ('port' in request.json and 'image' in request.json and 'tag' in request.json and request.json['tag']
+                and request.json['image'])
     else:
         return True
 
@@ -161,7 +162,10 @@ def update_service(service_id: str):
                     return jsonify({
                         'id': service_id,
                         'state': docker_state,
-                        'errors': errors
+                        'errors': errors,
+                        'image': image,
+                        'tag': tag,
+                        'port': port
                     }), 200
                 except NotFound:
                     return jsonify({'id': service_id, 'state': 'BUILD FAILED', 'errors': errors}), 200
