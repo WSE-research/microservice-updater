@@ -79,7 +79,7 @@ The API provides the following endpoints:
     the parameters `image`, `tag` and `port`. Set `mode` to `dockerfile`.
   
   ### Custom files
-  You can change the configuration by providing custom files. Therefor, you need to set the `files`
+  You can change the configuration by providing custom files. Therefore, you need to set the `files`
   parameter in the `POST` request body. To access the data you provide a `KEY-VALUE-PAIR` in the `files`
   value. The `KEY` has to be the relative path from the root of the repository to the file you want to
   insert in the registered service. The `VALUE` has to be the content you want to store inside the service.
@@ -106,7 +106,7 @@ The API provides the following endpoints:
   ```
   You need `$SERVICE_ID` to access the service state and trigger updates or deletions. As the service
   runs a background task to start the container, you don't get a failure message during the registration.
-  Therefor, verify the service state via the API.
+  Therefore, verify the service state via the API.
 * `/service/$SERVICE_ID`
   * `GET`-Request: Get the current state of the registration process. Response:
     ```json
