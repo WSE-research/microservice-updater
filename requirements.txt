@@ -15,4 +15,4 @@ six==1.16.0
 smmap==5.0.1
 urllib3==2.0.4
 websocket-client==1.6.4
-Werkzeug==3.0.0
+Werkzeug==3.0.1
