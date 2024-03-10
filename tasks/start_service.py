@@ -31,6 +31,7 @@ def start_service(service_id: str, mode: str, db, cursor, port, dockerfile, tag,
 
     ports = {}
 
+    docker_mode = mode
     if docker_mode in ['docker', 'dockerfile']:
         for port_mapping in port.split(','):
             ex_port, in_port = port_mapping.split(':')
