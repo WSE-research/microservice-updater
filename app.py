@@ -3,7 +3,7 @@ import os
 import sqlite3
 from service_config.config import modes, check_ports, regexp, InvalidPortMappingException, PortAlreadyUsedException
 from tasks.init_repo import load_repository
-from tasks.exceptions import *
+from tasks.exceptions import InvalidVolumeMappingException, RepositoryAlreadyExistsException
 import subprocess
 import json
 from git import GitCommandError
@@ -256,7 +256,7 @@ def manage_services():
                                   json.dumps(volumes)])
             # service already existing
             except RepositoryAlreadyExistsException:
-                logging.error(f'service already exists!')
+                logging.error('service already exists!')
                 return 'Service already existing', 400
             # Git clone failed
             except GitCommandError as e:
