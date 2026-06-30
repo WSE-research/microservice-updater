@@ -9,7 +9,7 @@ GitPython==3.1.50
 idna==3.18
 itsdangerous==2.2.0
 Jinja2==3.1.6
-MarkupSafe==2.1.5
+MarkupSafe==3.0.3
 requests==2.34.2
 six==1.17.0
 smmap==5.0.3
