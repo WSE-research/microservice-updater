@@ -55,3 +55,46 @@ def test_check_ports_detects_already_used_port(cursor):
     with pytest.raises(PortAlreadyUsedException) as exc:
         check_ports("8080:81", cursor)
     assert "8080" in exc.value.message
+
+
+@pytest.mark.parametrize("ports", [
+    "8080",          # no internal port
+    "8080:",         # empty internal port
+    ":80",           # empty external port
+    "abc:80",        # non-numeric external port
+    "80:def",        # non-numeric internal port
+    "8080:80:443",   # too many parts
+    "",              # empty string
+    "8080-80",       # wrong separator
+    "8080:80,",      # trailing comma yields an empty mapping
+    "8080:80, 8443:443",  # whitespace after the comma
+])
+def test_check_ports_rejects_malformed_mappings(cursor, ports):
+    with pytest.raises(InvalidPortMappingException):
+        check_ports(ports, cursor)
+
+
+def test_check_ports_detects_conflict_in_second_mapping(cursor):
+    cursor.execute(
+        "INSERT INTO repos VALUES ('svc', 'url', 'docker', 'RUNNING',"
+        " '8080:80', '.', '', '')"
+    )
+    with pytest.raises(PortAlreadyUsedException):
+        check_ports("9090:90,8080:80", cursor)
+
+
+def test_check_ports_detects_conflict_in_multi_mapping_service(cursor):
+    cursor.execute(
+        "INSERT INTO repos VALUES ('svc', 'url', 'docker', 'RUNNING',"
+        " '8080:80,8443:443', '.', '', '')"
+    )
+    with pytest.raises(PortAlreadyUsedException):
+        check_ports("8443:443", cursor)
+
+
+def test_check_ports_accepts_distinct_external_port(cursor):
+    cursor.execute(
+        "INSERT INTO repos VALUES ('svc', 'url', 'docker', 'RUNNING',"
+        " '9090:90', '.', '', '')"
+    )
+    assert check_ports("8080:80", cursor) is True
