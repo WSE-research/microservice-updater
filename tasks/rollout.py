@@ -1,10 +1,15 @@
 """
-Low-downtime update rollout for registered services (issue #149, phase 1).
+Low-downtime update rollout for registered services (issue #149).
 
-The updated image is prepared while the old container keeps serving; only
-then are the containers swapped. If the new container does not become ready,
-the previous image is restored, so a broken update never takes a service
-down for longer than the swap itself.
+Phase 1 (default): the updated image is prepared while the old container
+keeps serving; only then are the containers swapped. If the new container
+does not become ready, the previous image is restored, so a broken update
+never takes a service down for longer than the swap itself.
+
+Phase 2 (reverse-proxy profile): the new version is started *next to* the
+old one and only receives traffic once it is ready, by switching the nginx
+route. The registered port belongs to the proxy, so nothing has to be freed
+and the rollout is invisible to clients.
 """
 import logging
 import os
@@ -13,6 +18,9 @@ import time
 
 import requests
 from docker.errors import APIError, BuildError, ImageNotFound, NotFound
+
+import proxy
+from proxy import ProxyConfigurationException, ProxyUnavailableException
 
 READINESS_TIMEOUT = 60
 
@@ -43,11 +51,11 @@ def read_env_file():
     return None
 
 
-def run_container(docker_client, image_ref: str, service_id: str, ports: dict,
+def run_container(docker_client, image_ref: str, name: str, ports: dict,
                   env, volumes, tty=False):
     """Start a detached service container with the standard settings"""
     return docker_client.containers.run(image_ref, detach=True, tty=tty,
-                                        ports=ports, name=service_id,
+                                        ports=ports, name=name,
                                         restart_policy={'Name': 'always'},
                                         environment=env, volumes=volumes)
 
@@ -69,14 +77,41 @@ def prepare_image(docker_client, service_id: str, mode: str, image: str, tag: st
     return f'{image}:{tag}'
 
 
+def probe_urls(container, external_port: str, internal_port: str, health_path: str):
+    """
+    Collect the addresses a readiness probe should try for a container
+
+    Every network the container is attached to is probed on its internal
+    port; a published external port is used as a fallback.
+
+    :return: list of probe URLs
+    """
+    settings = (container.attrs or {}).get('NetworkSettings') or {}
+    addresses = [settings.get('IPAddress')]
+
+    for network in (settings.get('Networks') or {}).values():
+        addresses.append((network or {}).get('IPAddress'))
+
+    urls = []
+    for address in addresses:
+        url = f'http://{address}:{internal_port}{health_path}'
+        if address and url not in urls:
+            urls.append(url)
+
+    if external_port:
+        urls.append(f'http://localhost:{external_port}{health_path}')
+
+    return urls
+
+
 def wait_until_ready(container, external_port: str, internal_port: str,
                      health_path: str, timeout=READINESS_TIMEOUT):
     """
     Wait until the container is considered ready.
 
     With a configured health_path the container has to answer HTTP 200 on it
-    (probed via its bridge IP and via the host-mapped port); without one the
-    running state counts as ready.
+    (probed via its container IPs and via the host-mapped port); without one
+    the running state counts as ready.
 
     :return: True if the container became ready within the timeout
     """
@@ -89,11 +124,8 @@ def wait_until_ready(container, external_port: str, internal_port: str,
             return False
 
         if health_path:
-            ip = container.attrs['NetworkSettings']['IPAddress']
-            urls = [f'http://{ip}:{internal_port}{health_path}'] if ip else []
-            urls.append(f'http://localhost:{external_port}{health_path}')
-
-            for url in urls:
+            for url in probe_urls(container, external_port, internal_port,
+                                  health_path):
                 try:
                     if requests.get(url, timeout=2).status_code == 200:
                         return True
@@ -222,3 +254,100 @@ def update_compose_service(service_id: str, db, cursor):
     subprocess.run(['docker-compose', 'up', '-d'])
     set_state(db, cursor, service_id, 'RUNNING')
     return True
+
+
+def update_proxied_service(docker_client, service_id: str, mode: str, db, cursor,
+                           port: str, image: str, tag: str, health_path: str,
+                           volumes):
+    """
+    Update a 'docker' or 'dockerfile' service without any downtime (phase 2).
+
+    The new version is started next to the running one, gets no traffic until
+    it is ready and is then routed to by switching the reverse proxy. The
+    previous container keeps serving until the switch succeeded and is only
+    removed after a drain period, so clients never see a refused connection.
+
+    :return: True if the update succeeded
+    """
+    internal_port = port.split(',')[0].split(':')[1]
+    env = read_env_file()
+    tty = mode == 'dockerfile'
+
+    # prepare the new image; on failure the old container keeps serving
+    try:
+        image_ref = prepare_image(docker_client, service_id, mode, image, tag)
+    except (APIError, BuildError, ImageNotFound) as e:
+        message = (e.explanation if isinstance(e, APIError) else e.msg) or str(e)
+        logging.error(f'Preparing the updated image failed: {message}')
+        set_state(db, cursor, service_id, 'UPDATE FAILED', message)
+        return False
+
+    if mode == 'docker':
+        # promote the staged build to the service's regular tag
+        docker_client.images.get(image_ref).tag(service_id, 'latest')
+        image_ref = f'{service_id}:latest'
+
+    current_color = proxy.active_color(docker_client, service_id)
+    new_color = proxy.next_color(current_color)
+    new_name = proxy.container_name(service_id, new_color)
+
+    # a container left behind by an earlier failed rollout would block the name
+    proxy.remove_container(docker_client, new_name)
+
+    try:
+        new_container = run_container(docker_client, image_ref, new_name,
+                                      proxy.publish_spec(port), env, volumes, tty)
+    except APIError as e:
+        message = e.explanation or str(e)
+        logging.error(f'Starting the updated container failed: {message}')
+        set_state(db, cursor, service_id, 'UPDATE FAILED', message)
+        return False
+
+    if not wait_until_ready(new_container, '', internal_port, health_path):
+        message = f'updated container did not become ready within {READINESS_TIMEOUT}s'
+        logging.error(message)
+        proxy.remove_container(docker_client, new_name)
+        set_state(db, cursor, service_id, 'UPDATE FAILED', message)
+        return False
+
+    # a container from a deployment without the proxy still holds the
+    # registered port, which the proxy needs to listen on
+    proxy.remove_container(docker_client, service_id)
+
+    try:
+        proxy.switch_route(docker_client, service_id, port,
+                           proxy.published_ports(new_container))
+    except (ProxyConfigurationException, ProxyUnavailableException) as e:
+        logging.error(f'Switching the proxy route failed: {e.message}')
+        proxy.remove_container(docker_client, new_name)
+        set_state(db, cursor, service_id, 'UPDATE FAILED', e.message)
+        return False
+
+    # established connections keep using the old container while it drains
+    if current_color:
+        time.sleep(proxy.drain_seconds())
+        proxy.remove_container(docker_client,
+                               proxy.container_name(service_id, current_color))
+
+    set_state(db, cursor, service_id, 'RUNNING')
+    return True
+
+
+def update_service_containers(docker_client, service_id: str, mode: str, db,
+                              cursor, port: str, image: str, tag: str,
+                              health_path: str, volumes):
+    """
+    Run the rollout flow matching the service mode and deployment profile
+
+    :return: True if the update succeeded
+    """
+    if mode not in ['docker', 'dockerfile']:
+        return update_compose_service(service_id, db, cursor)
+
+    if proxy.proxy_enabled():
+        return update_proxied_service(docker_client, service_id, mode, db, cursor,
+                                      port, image, tag, health_path, volumes)
+
+    return update_single_container_service(docker_client, service_id, mode, db,
+                                           cursor, port, image, tag, health_path,
+                                           volumes)

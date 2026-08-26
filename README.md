@@ -17,6 +17,16 @@ Run `docker-compose up -d` to start the service. You can change the external
 port of this service by editing the variable `SERVICE_PORT` in the `.env`
 file.
 
+### Optional: zero-downtime deployment profile
+To roll updates out without any downtime at all, start the updater together
+with the bundled reverse proxy:
+
+```shell
+docker-compose -f docker-compose.yml -f docker-compose.proxy.yml up -d
+```
+
+See [Zero-downtime rollouts](#zero-downtime-rollouts) for what changes.
+
 ## Automatic registration of services
 To register a service at the Microservice updater, use the API endpoint `/service`.
 The following example provides the configuration to start a nginx server
@@ -127,11 +137,12 @@ The API provides the following endpoints:
     ```
     **Remark**: The updated image is built (or pulled) **while the old container keeps
     serving**; only then are the containers swapped, so the downtime is reduced to the
-    swap itself. If the build fails or the new container does not become ready (see
-    `health_path` below), the previous image is restored and the service state becomes
-    `UPDATE FAILED` — the reason is available via the `GET` request. The container is
-    still recreated from scratch, so all data inside the container is lost; use
-    `volumes` for persistent data.
+    swap itself — and to nothing at all with the
+    [reverse-proxy profile](#zero-downtime-rollouts). If the build fails or the new
+    container does not become ready (see `health_path` below), the previous version
+    keeps serving and the service state becomes `UPDATE FAILED` — the reason is
+    available via the `GET` request. The container is still recreated from scratch, so
+    all data inside the container is lost; use `volumes` for persistent data.
 
     ### Readiness probe (`health_path`)
     If a `health_path` (e.g. `/health`) is configured for a service, an update is only
@@ -141,6 +152,10 @@ The API provides the following endpoints:
     requires the updater to reach the managed containers — the provided
     `docker-compose.yml` attaches the updater to the default bridge network for that
     purpose (`network_mode: bridge`).
+
+    Configuring a `health_path` is what makes a rollout genuinely safe: without it a
+    container that starts and immediately fails its own initialization still counts
+    as a successful update.
     
   * `PATCH`-Request: Updates the settings of your service. You can change `port` and `tag` of the Docker image
     as well as the `health_path` readiness probe (an empty string removes the probe).
@@ -161,3 +176,67 @@ The API provides the following endpoints:
       "API-KEY": "a49bc0..."
     }
     ```
+
+## Zero-downtime rollouts
+By default an update costs a short interruption: the new image is prepared while
+the old container keeps serving, but the registered port has to be freed before
+the new container can bind it, so the swap itself takes a few seconds.
+
+The optional reverse-proxy profile removes that gap. An nginx proxy owns the
+registered ports and forwards them to the container that is currently active, so
+a rollout can start the new version **next to** the old one:
+
+1. build or pull the new image (the running version is untouched)
+2. start the new version as `$SERVICE_ID-blue` / `$SERVICE_ID-green`, alternating
+   with the color that is currently live — it publishes its internal ports on an
+   ephemeral loopback port instead of the registered one and receives no traffic
+3. wait until it is ready (see [`health_path`](#readiness-probe-health_path))
+4. rewrite the service's route and reload nginx — new connections go to the new
+   version, established ones finish against the old one
+5. drain, then stop and remove the previous container
+
+If any step fails, the route is left untouched, the new container is removed and
+the service state becomes `UPDATE FAILED`: clients keep talking to the old
+version and never notice the failed rollout. `PATCH` (port or tag change) uses
+the same flow.
+
+### Setup
+```shell
+docker-compose -f docker-compose.yml -f docker-compose.proxy.yml up -d
+```
+
+`docker-compose.proxy.yml` adds an `nginx:alpine` container and enables the
+profile in the updater. The proxy runs with **host networking** so the updater
+can add listeners for arbitrary registered ports with a config reload — the
+proxy container never has to be recreated when a service is registered or its
+port is patched.
+
+Forwarding happens on layer 4 (nginx `stream`), so the proxied protocol does not
+matter: HTTP, TLS-terminating services and plain TCP all work. The trade-off is
+that the backend sees the connection coming from `127.0.0.1` instead of the real
+client address. This is also why nginx was chosen over Traefik: Traefik's
+entrypoints are static configuration, while the registered ports of this updater
+are dynamic and change via `PATCH`.
+
+### Configuration
+The profile is controlled by environment variables of the updater:
+
+| Variable | Default | Description |
+|---|---|---|
+| `PROXY_ENABLED` | `false` | enables the blue-green rollout flow |
+| `PROXY_CONTAINER` | `microservice-proxy` | name of the nginx container to reload |
+| `PROXY_CONF_DIR` | `proxy/conf.d` | directory the generated routes are written to |
+| `PROXY_BACKEND_HOST` | `127.0.0.1` | address the managed containers publish on |
+| `PROXY_DRAIN_SECONDS` | `5` | grace period before the old container is removed |
+
+The generated route of a service lives in `proxy/conf.d/$SERVICE_ID.conf` and is
+removed together with the service.
+
+### Notes and limitations
+* Only the single-container modes `docker` and `dockerfile` are proxied.
+  `docker-compose` services keep publishing their own ports and are updated with
+  `build` first, then an in-place `up -d` recreation.
+* Services registered *before* the profile was enabled still hold the registered
+  port themselves. Their first update behind the proxy replaces that container,
+  which costs a one-time interruption; afterwards rollouts are seamless.
+* Host networking for the proxy requires a Linux docker host.

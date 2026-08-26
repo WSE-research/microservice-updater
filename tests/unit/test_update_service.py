@@ -51,3 +51,34 @@ def test_stop_service_unknown_mode_does_nothing(docker_client):
 
     run.assert_not_called()
     docker_client.containers.get.assert_not_called()
+
+
+@pytest.fixture
+def proxy_env(tmp_path, monkeypatch):
+    """Enable the reverse-proxy profile with an isolated config directory."""
+    monkeypatch.setenv("PROXY_ENABLED", "true")
+    monkeypatch.setenv("PROXY_CONF_DIR", str(tmp_path / "conf.d"))
+    monkeypatch.setenv("PROXY_CONTAINER", "microservice-proxy")
+    return tmp_path / "conf.d"
+
+
+def test_stop_service_removes_colored_containers_and_route(docker_client,
+                                                           proxy_env):
+    update_service.proxy.write_config("svc", "server {}")
+    docker_client.containers.get.return_value.exec_run.return_value = (0, b"")
+
+    update_service.stop_service("docker", "svc")
+
+    looked_up = [call.args[0]
+                 for call in docker_client.containers.get.call_args_list]
+    assert looked_up == ["svc", "svc-blue", "svc-green", "microservice-proxy"]
+    assert not (proxy_env / "svc.conf").exists()
+
+
+def test_stop_service_without_the_profile_keeps_the_plain_lookup(docker_client,
+                                                                 monkeypatch):
+    monkeypatch.delenv("PROXY_ENABLED", raising=False)
+
+    update_service.stop_service("docker", "svc")
+
+    docker_client.containers.get.assert_called_once_with("svc")

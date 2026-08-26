@@ -515,3 +515,23 @@ def test_patch_with_empty_tag_keeps_current_tag(app_env):
 
     assert resp.status_code == 200
     assert service_row("svc")[7] == "alpine"
+
+
+def test_get_state_finds_a_proxied_container(app_env):
+    """With the reverse-proxy profile the service runs under a colored name."""
+    from docker.errors import NotFound
+
+    app_module, client = app_env
+    register_service("svc", port="8080:80", image="nginx", tag="alpine")
+
+    green = mock.Mock(status="running")
+    with mock.patch.object(app_module.docker, "from_env") as from_env:
+        from_env.return_value.containers.get.side_effect = [
+            NotFound("no plain container"), NotFound("no blue"), green]
+        resp = client.get("/service/svc")
+
+    assert resp.status_code == 200
+    assert resp.get_json()["state"] == "RUNNING"
+    assert [call.args[0] for call
+            in from_env.return_value.containers.get.call_args_list] == \
+        ["svc", "svc-blue", "svc-green"]
