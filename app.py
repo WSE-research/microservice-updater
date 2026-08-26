@@ -90,7 +90,7 @@ def update_service(service_id: str):
 
         # service exists
         if service_data := service_cursor.fetchone():
-            _, url, mode, _, port, docker_root, image, tag = service_data
+            stored_id, url, mode, _, port, docker_root, image, tag = service_data
 
             # service update requested
             if (method := request.method) == 'POST':
@@ -149,8 +149,9 @@ def update_service(service_id: str):
 
                 return f'service "{service_id}" patched and restarted', 200
             else:
-                # error.txt only exists after the first start attempt finished
-                error_file = f'services/{service_id}/error.txt'
+                # error.txt only exists after the first start attempt finished;
+                # build the path from the registered id, not the raw URL value
+                error_file = f'services/{stored_id}/error.txt'
                 if os.path.exists(error_file):
                     with open(error_file) as f:
                         errors = f.read()
