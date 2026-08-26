@@ -60,6 +60,7 @@ The API provides the following endpoints:
       "port": "port mapping (eg. '80:80' or '80:80,443:443') (optional)",
       "image": "dockerhub image (optional)",
       "tag": "dockerhub image tag (optional)",
+      "health_path": "HTTP readiness probe path, eg. '/health' (optional)",
       "files": {
         "path_and_file_name": "file content"
       },
@@ -124,16 +125,33 @@ The API provides the following endpoints:
       }
     }
     ```
-    **Remark**: The docker service will be rebuilt and restarted from scratch. All data will be lost!
+    **Remark**: The updated image is built (or pulled) **while the old container keeps
+    serving**; only then are the containers swapped, so the downtime is reduced to the
+    swap itself. If the build fails or the new container does not become ready (see
+    `health_path` below), the previous image is restored and the service state becomes
+    `UPDATE FAILED` — the reason is available via the `GET` request. The container is
+    still recreated from scratch, so all data inside the container is lost; use
+    `volumes` for persistent data.
+
+    ### Readiness probe (`health_path`)
+    If a `health_path` (e.g. `/health`) is configured for a service, an update is only
+    considered successful once the new container answers `HTTP 200` on that path
+    (probed via the container's bridge IP and the mapped port, timeout 60 s). Without
+    a configured `health_path`, the running container state counts as ready. The probe
+    requires the updater to reach the managed containers — the provided
+    `docker-compose.yml` attaches the updater to the default bridge network for that
+    purpose (`network_mode: bridge`).
     
-  * `PATCH`-Request: Updates the settings of your service. You can change `port` and `tag` of the Docker image.
+  * `PATCH`-Request: Updates the settings of your service. You can change `port` and `tag` of the Docker image
+    as well as the `health_path` readiness probe (an empty string removes the probe).
     The service will be rebuilt after the application of the changes. If you used `volumes` you need to provide them in
     the request body again.
     ```json
     {
       "API-KEY": "a49bc0...",
       "port": "80:80,443:443",
-      "tag": "nightly"
+      "tag": "nightly",
+      "health_path": "/health"
     }
     ```
 
