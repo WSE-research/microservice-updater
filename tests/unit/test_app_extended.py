@@ -216,6 +216,24 @@ def test_get_state_of_running_container(app_env):
     from_env.return_value.containers.get.assert_called_once_with("svc")
 
 
+def test_get_state_while_initializing_reports_no_errors(app_env):
+    # regression for issue #143: error.txt only exists after the first start
+    # attempt, polling the state before that must not crash
+    app_module, client = app_env
+    register_service("svc", state="INITIALIZING", port="8080:80",
+                     image="nginx", tag="alpine")
+    os.remove(os.path.join("services", "svc", "error.txt"))
+
+    with mock.patch.object(app_module.docker, "from_env") as from_env:
+        from_env.return_value.containers.get.return_value.status = "created"
+        resp = client.get("/service/svc")
+
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["state"] == "CREATED"
+    assert data["errors"] == ""
+
+
 def test_update_forwards_files_and_volumes(app_env):
     app_module, client = app_env
     register_service("svc")
