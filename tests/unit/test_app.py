@@ -129,7 +129,7 @@ def registered(tmp_path, monkeypatch):
     with sqlite3.connect(os.path.join("services", "services.db")) as db:
         db.execute(
             "INSERT INTO repos VALUES ('svc1', 'http://x/y.git', 'docker',"
-            " 'RUNNING', '8080:80', '.', 'img', 'tag')"
+            " 'RUNNING', '8080:80', '.', 'img', 'tag', '')"
         )
         db.commit()
 

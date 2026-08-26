@@ -34,14 +34,15 @@ def app_env(tmp_path, monkeypatch):
 
 def register_service(service_id, url="", mode="dockerfile", state="RUNNING",
                      port="8080:80", docker_root=".", image="nginx",
-                     tag="alpine", errors=""):
+                     tag="alpine", errors="", health_path=""):
     """Insert a service row + workspace as the background tasks would."""
     os.makedirs(os.path.join("services", service_id), exist_ok=True)
     with open(os.path.join("services", service_id, "error.txt"), "w") as f:
         f.write(errors)
     with sqlite3.connect(os.path.join("services", "services.db")) as db:
-        db.execute("INSERT INTO repos VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                   (service_id, url, mode, state, port, docker_root, image, tag))
+        db.execute("INSERT INTO repos VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                   (service_id, url, mode, state, port, docker_root, image, tag,
+                    health_path))
         db.commit()
 
 
@@ -77,7 +78,7 @@ def test_register_dockerfile_service(app_env):
     assert resp.get_json() == {"id": "nginx", "state": "CREATED"}
     assert os.path.isdir(os.path.join("services", "nginx"))
     assert service_row("nginx") == ("nginx", "", "dockerfile", "INITIALIZING",
-                                    "8080:80", ".", "nginx", "alpine")
+                                    "8080:80", ".", "nginx", "alpine", "")
     popen.assert_called_once_with(
         ["python", "tasks/start_service.py", "nginx", "dockerfile", ".",
          "8080:80", "nginx", "alpine", "[]"])
@@ -233,7 +234,7 @@ def test_register_docker_mode_uses_cloned_repository(app_env):
     assert resp.status_code == 200
     assert resp.get_json() == {"id": "example-org-repo", "state": "CREATED"}
     load.assert_called_once_with("https://example.org/org/repo.git", "docker",
-                                 "8080:80", ".", "", "", {})
+                                 "8080:80", ".", "", "", {}, "")
 
 
 def test_register_reports_failed_clone(app_env):
@@ -265,6 +266,7 @@ def test_get_state_of_running_container(app_env):
         "image": "nginx",
         "tag": "alpine",
         "port": "8080:80",
+        "health_path": "",
     }
     from_env.return_value.containers.get.assert_called_once_with("svc")
 
@@ -323,6 +325,93 @@ def test_unknown_service_id_is_escaped_in_404(app_env):
     assert resp.status_code == 404
     assert b"<img" not in resp.data
     assert b"&lt;img" in resp.data
+
+
+def test_register_stores_health_path(app_env):
+    # issue #149: optional HTTP readiness probe path
+    app_module, client = app_env
+    with mock.patch.object(app_module.subprocess, "Popen"):
+        resp = post_service(client, mode="dockerfile", image="nginx",
+                            tag="alpine", port="8080:80",
+                            health_path="/health")
+
+    assert resp.status_code == 200
+    assert service_row("nginx")[8] == "/health"
+
+
+@pytest.mark.parametrize("health_path", ["health", 5, ["/health"]])
+def test_register_rejects_invalid_health_path(app_env, health_path):
+    app_module, client = app_env
+    with mock.patch.object(app_module.subprocess, "Popen") as popen:
+        resp = post_service(client, mode="dockerfile", image="nginx",
+                            tag="alpine", port="8080:80",
+                            health_path=health_path)
+
+    assert resp.status_code == 400
+    assert b"Invalid health path provided" in resp.data
+    popen.assert_not_called()
+
+
+def test_patch_updates_and_clears_health_path(app_env):
+    app_module, client = app_env
+    register_service("svc")
+
+    with mock.patch.object(app_module.subprocess, "Popen"):
+        resp = client.patch("/service/svc",
+                            json={"API-KEY": API_KEY,
+                                  "health_path": "/health"})
+        assert resp.status_code == 200
+        assert service_row("svc")[8] == "/health"
+
+        # unlike tag/port, an empty value clears the probe
+        resp = client.patch("/service/svc",
+                            json={"API-KEY": API_KEY, "health_path": ""})
+        assert resp.status_code == 200
+        assert service_row("svc")[8] == ""
+
+
+def test_patch_rejects_invalid_health_path(app_env):
+    app_module, client = app_env
+    register_service("svc", health_path="/health")
+
+    with mock.patch.object(app_module.subprocess, "Popen") as popen:
+        resp = client.patch("/service/svc",
+                            json={"API-KEY": API_KEY, "health_path": "health"})
+
+    assert resp.status_code == 400
+    assert service_row("svc")[8] == "/health"
+    popen.assert_not_called()
+
+
+def test_get_reports_update_failed_over_running_container(app_env):
+    # issue #149: after a rollback the old container keeps running, but the
+    # API has to surface the failed update
+    app_module, client = app_env
+    register_service("svc", state="UPDATE FAILED",
+                     errors="updated container did not become ready")
+
+    with mock.patch.object(app_module.docker, "from_env") as from_env:
+        from_env.return_value.containers.get.return_value.status = "running"
+        resp = client.get("/service/svc")
+
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["state"] == "UPDATE FAILED"
+    assert "did not become ready" in data["errors"]
+
+
+def test_get_reports_update_failed_without_container(app_env):
+    from docker.errors import NotFound
+
+    app_module, client = app_env
+    register_service("svc", state="UPDATE FAILED", errors="update broke")
+
+    with mock.patch.object(app_module.docker, "from_env") as from_env:
+        from_env.return_value.containers.get.side_effect = NotFound("gone")
+        resp = client.get("/service/svc")
+
+    assert resp.status_code == 200
+    assert resp.get_json()["state"] == "UPDATE FAILED"
 
 
 def test_get_state_while_initializing_reports_no_errors(app_env):

@@ -31,7 +31,15 @@ else:
 with sqlite3.connect('services/services.db') as db:
     cursor = db.cursor()
     cursor.execute('CREATE TABLE IF NOT EXISTS repos(id TEXT PRIMARY KEY, url TEXT, mode TEXT,'
-                   'state TEXT, port TEXT, docker_root TEXT, image TEXT, tag TEXT)')
+                   'state TEXT, port TEXT, docker_root TEXT, image TEXT, tag TEXT,'
+                   "health_path TEXT DEFAULT '')")
+
+    # upgrade databases created before the health_path column existed
+    try:
+        cursor.execute("ALTER TABLE repos ADD COLUMN health_path TEXT DEFAULT ''")
+    except sqlite3.OperationalError:
+        pass
+
     cursor.close()
     db.commit()
 
@@ -55,6 +63,20 @@ def check_volumes(volumes):
         raise InvalidVolumeMappingException('Invalid volume mapping format provided')
 
     return volumes
+
+
+def check_health_path(health_path):
+    """
+    Validate an optional HTTP readiness probe path
+
+    :param health_path: URL path like '/health' or '' to disable the probe
+    :raises InvalidPathException
+    :return: the validated health path
+    """
+    if not isinstance(health_path, str) or (health_path and not health_path.startswith('/')):
+        raise InvalidPathException('Invalid health path provided')
+
+    return health_path
 
 
 def check_files(files):
@@ -122,11 +144,12 @@ def update_service(service_id: str):
 
         # search service
         service_cursor = service_db.cursor()
-        service_cursor.execute('SELECT * FROM repos WHERE id = ?', (service_id,))
+        service_cursor.execute('SELECT id, url, mode, state, port, docker_root, image, tag,'
+                               ' health_path FROM repos WHERE id = ?', (service_id,))
 
         # service exists
         if service_data := service_cursor.fetchone():
-            stored_id, url, mode, _, port, docker_root, image, tag = service_data
+            stored_id, url, mode, db_state, port, docker_root, image, tag, health_path = service_data
 
             # service update requested
             if (method := request.method) == 'POST':
@@ -159,11 +182,14 @@ def update_service(service_id: str):
             elif method == 'PATCH':
                 payload = request.json
 
-                # validate the volumes before any setting is changed
+                # validate the payload before any setting is changed
                 try:
                     volumes = check_volumes(payload['volumes'] if 'volumes' in payload else [])
-                except InvalidVolumeMappingException as e:
-                    logging.error(f'Invalid volume mapping provided: {e}')
+
+                    if 'health_path' in payload:
+                        check_health_path(payload['health_path'])
+                except (InvalidVolumeMappingException, InvalidPathException) as e:
+                    logging.error(f'Invalid patch payload provided: {e.message}')
                     return e.message, 400
 
                 if 'port' in payload:
@@ -181,6 +207,13 @@ def update_service(service_id: str):
                             update_cursor.execute(f'UPDATE repos SET {param} = ? WHERE id = ?',
                                                   (payload[param], service_id))
                             service_db.commit()
+
+                # unlike tag/port, an empty value clears the readiness probe
+                if 'health_path' in payload:
+                    update_cursor = service_db.cursor()
+                    update_cursor.execute('UPDATE repos SET health_path = ? WHERE id = ?',
+                                          (payload['health_path'], service_id))
+                    service_db.commit()
 
                 start_update(service_id, {}, volumes)
 
@@ -200,7 +233,12 @@ def update_service(service_id: str):
                     docker_client = docker.from_env()
                     container = docker_client.containers.get(service_id)
 
-                    docker_state = container.status.upper()
+                    # a failed update leaves the previous container serving,
+                    # so the stored state has to override the docker state
+                    if db_state == 'UPDATE FAILED':
+                        docker_state = db_state
+                    else:
+                        docker_state = container.status.upper()
 
                     return jsonify({
                         'id': service_id,
@@ -208,10 +246,12 @@ def update_service(service_id: str):
                         'errors': errors,
                         'image': image,
                         'tag': tag,
-                        'port': port
+                        'port': port,
+                        'health_path': health_path
                     }), 200
                 except NotFound:
-                    return jsonify({'id': service_id, 'state': 'BUILD FAILED', 'errors': errors}), 200
+                    state = db_state if db_state == 'UPDATE FAILED' else 'BUILD FAILED'
+                    return jsonify({'id': service_id, 'state': state, 'errors': errors}), 200
         # service does not exist
         else:
             logging.warning(f'Service {service_id} not found.')
@@ -253,6 +293,7 @@ def manage_services():
             url = data['url'] if 'url' in data else ''
             files = data['files'] if 'files' in data else {}
             volumes = data['volumes'] if 'volumes' in data else []
+            health_path = data['health_path'] if 'health_path' in data else ''
             mode = data['mode']
             port = ''
             image = ''
@@ -260,6 +301,7 @@ def manage_services():
 
             volumes = check_volumes(volumes)
             files = check_files(files)
+            health_path = check_health_path(health_path)
 
             # mode "docker" requires external port mapping
             if mode in ['docker', 'dockerfile'] and not valid(mode):
@@ -290,7 +332,8 @@ def manage_services():
 
             try:
                 # register new service
-                service_id = load_repository(url, mode, port, docker_root, image, tag, files)
+                service_id = load_repository(url, mode, port, docker_root, image, tag, files,
+                                             health_path)
 
                 # start new service
                 subprocess.Popen(['python', 'tasks/start_service.py', service_id, mode, docker_root, port, image, tag,

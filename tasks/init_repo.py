@@ -6,7 +6,8 @@ from tasks.exceptions import RepositoryAlreadyExistsException, InvalidPathExcept
 import os
 
 
-def load_repository(url: str, mode: str, port: str, docker_root: str, dockerfile='.', tag='.', files=None):
+def load_repository(url: str, mode: str, port: str, docker_root: str, dockerfile='.', tag='.', files=None,
+                    health_path=''):
     """
     Clone a repository and store configuration into database
 
@@ -17,6 +18,7 @@ def load_repository(url: str, mode: str, port: str, docker_root: str, dockerfile
     :param docker_root: directory of repo with Dockerfile/docker-compose.yml
     :param dockerfile: docker image name from dockerhub
     :param tag: tag of dockerfile
+    :param health_path: optional HTTP readiness probe path
     :raises RepositoryAlreadyExistsException
     :raises InvalidPathException
     :return: id of the created repository
@@ -66,8 +68,8 @@ def load_repository(url: str, mode: str, port: str, docker_root: str, dockerfile
         cursor = db.cursor()
 
         # store configuration in SQLite db
-        cursor.execute('INSERT INTO repos VALUES (?, ?, ?, "INITIALIZING", ?, ?, ?, ?)',
-                       (link, url, mode, port, docker_root, dockerfile, tag))
+        cursor.execute('INSERT INTO repos VALUES (?, ?, ?, "INITIALIZING", ?, ?, ?, ?, ?)',
+                       (link, url, mode, port, docker_root, dockerfile, tag, health_path))
         db.commit()
         cursor.close()
 

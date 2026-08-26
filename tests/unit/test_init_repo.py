@@ -22,7 +22,7 @@ def workspace(tmp_path, monkeypatch):
     with sqlite3.connect(os.path.join("services", "services.db")) as db:
         db.execute(
             "CREATE TABLE repos(id TEXT PRIMARY KEY, url TEXT, mode TEXT, state TEXT,"
-            " port TEXT, docker_root TEXT, image TEXT, tag TEXT)"
+            " port TEXT, docker_root TEXT, image TEXT, tag TEXT, health_path TEXT DEFAULT '')"
         )
         db.commit()
     return tmp_path

@@ -4,7 +4,7 @@ import os
 from git.repo import Repo
 from json import loads
 import subprocess
-from start_service import start_service
+from rollout import update_single_container_service, update_compose_service
 import docker
 from docker.errors import NotFound
 import logging
@@ -52,7 +52,8 @@ if __name__ == '__main__':
         cursor = db.cursor()
 
         # check, if service exists
-        cursor.execute('SELECT docker_root, mode, port, image, tag FROM repos WHERE id = ?', (service_id,))
+        cursor.execute('SELECT docker_root, mode, port, image, tag, health_path FROM repos'
+                       ' WHERE id = ?', (service_id,))
 
         # service exists
         if service := cursor.fetchone():
@@ -81,10 +82,15 @@ if __name__ == '__main__':
 
             os.chdir(f'services/{service_id}/{service[0]}')
 
-            mode = service[1]
+            docker_root, mode, port, image, tag, health_path = service
 
-            # build new images and containers
-            stop_service(mode, service_id)
-            start_service(service_id, mode, db, cursor, service[2], service[3], service[4], volumes)
+            # prepare the new version while the old container keeps serving,
+            # then swap with readiness check and rollback (issue #149)
+            if mode in ['docker', 'dockerfile']:
+                update_single_container_service(docker.from_env(), service_id,
+                                                mode, db, cursor, port, image,
+                                                tag, health_path, volumes)
+            else:
+                update_compose_service(service_id, db, cursor)
 
             os.chdir(base_dir)
