@@ -2,7 +2,7 @@ import logging
 
 from git import Repo
 import sqlite3
-from tasks.exceptions import RepositoryAlreadyExistsException
+from tasks.exceptions import RepositoryAlreadyExistsException, InvalidPathException
 import os
 
 
@@ -18,6 +18,7 @@ def load_repository(url: str, mode: str, port: str, docker_root: str, dockerfile
     :param dockerfile: docker image name from dockerhub
     :param tag: tag of dockerfile
     :raises RepositoryAlreadyExistsException
+    :raises InvalidPathException
     :return: id of the created repository
     """
     if files is None:
@@ -27,7 +28,10 @@ def load_repository(url: str, mode: str, port: str, docker_root: str, dockerfile
     else:
         link = '-'.join(url.lower().replace('//', '').split('/')[1:]).replace('.git', '')
 
-    repo_path = os.path.join('services', link)
+    # the derived id has to stay below the services directory
+    repo_path = os.path.normpath(os.path.join('services', link))
+    if not repo_path.startswith('services' + os.sep):
+        raise InvalidPathException('Invalid service id')
 
     # repository already exists
     if os.path.exists(repo_path):
@@ -47,7 +51,10 @@ def load_repository(url: str, mode: str, port: str, docker_root: str, dockerfile
 
     # add all optional files to repository
     for file in files:
-        file_path = os.path.join(repo_path, file.replace("..", "."))
+        # custom files have to stay inside the service's directory
+        file_path = os.path.normpath(os.path.join(repo_path, file))
+        if not file_path.startswith(repo_path + os.sep):
+            raise InvalidPathException('Invalid file path provided')
 
         os.makedirs(os.path.dirname(file_path), exist_ok=True)
 

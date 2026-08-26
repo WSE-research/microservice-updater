@@ -269,6 +269,62 @@ def test_get_state_of_running_container(app_env):
     from_env.return_value.containers.get.assert_called_once_with("svc")
 
 
+@pytest.mark.parametrize("files", [
+    ["not-a-dict"],                    # wrong type
+    {"../escape.txt": "pwned"},        # traversal
+    {"/etc/evil.txt": "pwned"},        # absolute path
+    {"a/../../escape.txt": "pwned"},   # nested traversal
+    {"": "empty name"},                # empty path
+    {"config.txt": 5},                 # non-string content
+])
+def test_register_rejects_invalid_files(app_env, files):
+    # hardening from issue #150
+    app_module, client = app_env
+    with mock.patch.object(app_module.subprocess, "Popen") as popen:
+        resp = post_service(client, mode="dockerfile", image="nginx",
+                            tag="alpine", port="8080:80", files=files)
+
+    assert resp.status_code == 400
+    assert not os.path.exists(os.path.join("services", "nginx"))
+    popen.assert_not_called()
+
+
+def test_update_rejects_escaping_file_path(app_env):
+    # hardening from issue #150
+    app_module, client = app_env
+    register_service("svc")
+
+    with mock.patch.object(app_module.subprocess, "Popen") as popen:
+        resp = client.post("/service/svc",
+                           json={"API-KEY": API_KEY,
+                                 "files": {"../escape.txt": "pwned"}})
+
+    assert resp.status_code == 400
+    assert b"Invalid file path provided" in resp.data
+    popen.assert_not_called()
+
+
+def test_register_rejects_escaping_service_id(app_env):
+    # hardening from issue #150: an image name of '..' must not resolve
+    # to a directory outside services/
+    _, client = app_env
+    resp = post_service(client, mode="dockerfile", image="..", tag="1.0",
+                        port="8080:80")
+
+    assert resp.status_code == 400
+    assert b"Invalid service id" in resp.data
+
+
+def test_unknown_service_id_is_escaped_in_404(app_env):
+    # hardening from issue #150: the 404 echoes the id HTML-escaped
+    _, client = app_env
+    resp = client.get("/service/<img%20src=x%20onerror=alert(1)>")
+
+    assert resp.status_code == 404
+    assert b"<img" not in resp.data
+    assert b"&lt;img" in resp.data
+
+
 def test_get_state_while_initializing_reports_no_errors(app_env):
     # regression for issue #143: error.txt only exists after the first start
     # attempt, polling the state before that must not crash

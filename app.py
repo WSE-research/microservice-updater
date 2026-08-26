@@ -1,9 +1,10 @@
 from flask import Flask, request, jsonify, redirect, url_for
+from markupsafe import escape
 import os
 import sqlite3
 from service_config.config import modes, check_ports, regexp, InvalidPortMappingException, PortAlreadyUsedException
 from tasks.init_repo import load_repository
-from tasks.exceptions import InvalidVolumeMappingException, RepositoryAlreadyExistsException
+from tasks.exceptions import InvalidVolumeMappingException, RepositoryAlreadyExistsException, InvalidPathException
 import subprocess
 import json
 from git import GitCommandError
@@ -54,6 +55,29 @@ def check_volumes(volumes):
         raise InvalidVolumeMappingException('Invalid volume mapping format provided')
 
     return volumes
+
+
+def check_files(files):
+    """
+    Validate a custom file mapping
+
+    :param files: dict of (relative file path, file content) pairs
+    :raises InvalidPathException
+    :return: the validated file mapping
+    """
+    if type(files) is not dict:
+        raise InvalidPathException('File mapping object expected')
+
+    for file, content in files.items():
+        if not isinstance(file, str) or not isinstance(content, str):
+            raise InvalidPathException('File names and contents have to be strings')
+
+        # the path has to stay inside the service's directory
+        normalized = os.path.normpath(file)
+        if normalized == '.' or os.path.isabs(normalized) or normalized.startswith('..'):
+            raise InvalidPathException('Invalid file path provided')
+
+    return files
 
 
 def start_update(service_id: str, files: dict, volumes: list[str]):
@@ -115,18 +139,20 @@ def update_service(service_id: str):
 
                 try:
                     volumes = check_volumes(volumes)
+                    files = check_files(files)
 
                     # start background task to update the service
                     start_update(service_id, files, volumes)
                     return 'Update initiated', 200
-                except InvalidVolumeMappingException as e:
-                    logging.error(f'Invalid volume mapping provided: {e}')
+                except (InvalidVolumeMappingException, InvalidPathException) as e:
+                    logging.error(f'Invalid update payload provided: {e.message}')
                     return e.message, 400
             elif method == 'DELETE':
                 delete_process = subprocess.run(['python', 'tasks/delete_repo.py', service_id])
 
                 if delete_process.returncode == 0:
-                    return f'{service_id} removed', 200
+                    # echo the registered id, not the raw URL value
+                    return f'{stored_id} removed', 200
                 else:
                     logging.error(f'deletion of {service_id} failed')
                     return 'deletion not completed', 500
@@ -158,7 +184,7 @@ def update_service(service_id: str):
 
                 start_update(service_id, {}, volumes)
 
-                return f'service "{service_id}" patched and restarted', 200
+                return f'service "{stored_id}" patched and restarted', 200
             else:
                 # error.txt only exists after the first start attempt finished;
                 # build the path from the registered id, not the raw URL value
@@ -189,7 +215,7 @@ def update_service(service_id: str):
         # service does not exist
         else:
             logging.warning(f'Service {service_id} not found.')
-            return f'{service_id} not found', 404
+            return f'{escape(service_id)} not found', 404
 
 
 @app.route('/service/', methods=['GET', 'POST'])
@@ -233,6 +259,7 @@ def manage_services():
             tag = ''
 
             volumes = check_volumes(volumes)
+            files = check_files(files)
 
             # mode "docker" requires external port mapping
             if mode in ['docker', 'dockerfile'] and not valid(mode):
@@ -280,8 +307,8 @@ def manage_services():
         except KeyError as e:
             logging.error(f'Needed parameters not provided! {e}')
             return 'Missing argument', 400
-        except InvalidVolumeMappingException as e:
-            logging.error(f'Invalid volume mapping provided: {e}')
+        except (InvalidVolumeMappingException, InvalidPathException) as e:
+            logging.error(f'Invalid registration payload provided: {e.message}')
             return e.message, 400
 
         return jsonify({'id': service_id, 'state': 'CREATED'}), 200

@@ -10,3 +10,12 @@ class InvalidVolumeMappingException(Exception):
     """
     def __init__(self, message):
         self.message = message
+
+
+class InvalidPathException(Exception):
+    """
+    Raised, if a provided service id or file path would escape its
+    designated directory
+    """
+    def __init__(self, message):
+        self.message = message
