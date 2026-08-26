@@ -98,3 +98,29 @@ def test_check_ports_accepts_distinct_external_port(cursor):
         " '9090:90', '.', '', '')"
     )
     assert check_ports("8080:80", cursor) is True
+
+
+def test_check_ports_accepts_suffix_of_used_external_port(cursor):
+    # regression for issue #141: 80 is free even though 8080 is taken
+    cursor.execute(
+        "INSERT INTO repos VALUES ('svc', 'url', 'docker', 'RUNNING',"
+        " '8080:80', '.', '', '')"
+    )
+    assert check_ports("80:80", cursor) is True
+
+
+def test_check_ports_accepts_external_port_containing_used_one(cursor):
+    cursor.execute(
+        "INSERT INTO repos VALUES ('svc', 'url', 'docker', 'RUNNING',"
+        " '80:80', '.', '', '')"
+    )
+    assert check_ports("8080:8080", cursor) is True
+
+
+def test_check_ports_detects_conflict_after_comma(cursor):
+    cursor.execute(
+        "INSERT INTO repos VALUES ('svc', 'url', 'docker', 'RUNNING',"
+        " '9090:90,8080:80', '.', '', '')"
+    )
+    with pytest.raises(PortAlreadyUsedException):
+        check_ports("8080:80", cursor)
