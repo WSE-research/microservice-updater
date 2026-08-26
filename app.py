@@ -38,10 +38,22 @@ app = Flask(__name__)
 
 
 def check_volumes(volumes):
+    """
+    Validate a volume mapping list and drop empty entries
+
+    :param volumes: list of 'host_path:container_path' mappings
+    :raises InvalidVolumeMappingException
+    :return: the volume list without empty entries
+    """
     if type(volumes) is not list:
         raise InvalidVolumeMappingException('Volume mapping list expected')
-    if any([len(volume.split(':')) != 2 for volume in volumes]):
+
+    volumes = [volume for volume in volumes if volume != '']
+
+    if any([not isinstance(volume, str) or len(volume.split(':')) != 2 for volume in volumes]):
         raise InvalidVolumeMappingException('Invalid volume mapping format provided')
+
+    return volumes
 
 
 def start_update(service_id: str, files: dict, volumes: list[str]):
@@ -101,11 +113,8 @@ def update_service(service_id: str):
                 files = payload['files'] if 'files' in payload else {}
                 volumes = payload['volumes'] if 'volumes' in payload else []
 
-                if '' in volumes:
-                    volumes.remove('')
-
                 try:
-                    check_volumes(volumes)
+                    volumes = check_volumes(volumes)
 
                     # start background task to update the service
                     start_update(service_id, files, volumes)
@@ -124,6 +133,13 @@ def update_service(service_id: str):
             elif method == 'PATCH':
                 payload = request.json
 
+                # validate the volumes before any setting is changed
+                try:
+                    volumes = check_volumes(payload['volumes'] if 'volumes' in payload else [])
+                except InvalidVolumeMappingException as e:
+                    logging.error(f'Invalid volume mapping provided: {e}')
+                    return e.message, 400
+
                 if 'port' in payload:
                     try:
                         check_ports(payload['port'], service_db.cursor())
@@ -139,11 +155,6 @@ def update_service(service_id: str):
                             update_cursor.execute(f'UPDATE repos SET {param} = ? WHERE id = ?',
                                                   (payload[param], service_id))
                             service_db.commit()
-
-                volumes = payload['volumes'] if 'volumes' in payload else []
-
-                if '' in volumes:
-                    volumes.remove('')
 
                 start_update(service_id, {}, volumes)
 
@@ -221,10 +232,7 @@ def manage_services():
             image = ''
             tag = ''
 
-            if '' in volumes:
-                volumes.remove('')
-
-            check_volumes(volumes)
+            volumes = check_volumes(volumes)
 
             # mode "docker" requires external port mapping
             if mode in ['docker', 'dockerfile'] and not valid(mode):
