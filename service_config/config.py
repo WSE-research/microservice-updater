@@ -30,7 +30,9 @@ def check_ports(ports: str, cursor: Cursor):
             raise InvalidPortMappingException()
 
         external = port.split(':')[0]
-        cursor.execute("select port from repos WHERE port REGEXP ?", (f'.*{external}:.*',))
+        # the external port has to start a mapping (beginning of the string or
+        # right after a comma), otherwise e.g. 80 would collide with 8080:80
+        cursor.execute("select port from repos WHERE port REGEXP ?", (f'(.*,)?{external}:.*',))
         existing_mappings = cursor.fetchall()
 
         if len(existing_mappings):
