@@ -11,7 +11,7 @@ from unittest import mock
 import pytest
 
 from tasks import init_repo
-from tasks.exceptions import RepositoryAlreadyExistsException
+from tasks.exceptions import InvalidPathException, RepositoryAlreadyExistsException
 from tasks.init_repo import load_repository
 
 
@@ -54,14 +54,23 @@ def test_load_repository_rejects_existing_repository(workspace):
         )
 
 
-def test_load_repository_custom_file_cannot_escape_service_dir(workspace):
-    load_repository(
-        url="", mode="dockerfile", port="8080:80", docker_root=".",
-        dockerfile="myimage", tag="1.0", files={"../escape.txt": "pwned"},
-    )
-    # the ".." is neutralized, so the file lands inside the service directory
+def test_load_repository_rejects_escaping_custom_file(workspace):
+    # hardening from issue #150: traversal is rejected, no longer rewritten
+    with pytest.raises(InvalidPathException):
+        load_repository(
+            url="", mode="dockerfile", port="8080:80", docker_root=".",
+            dockerfile="myimage", tag="1.0", files={"../escape.txt": "pwned"},
+        )
+
     assert not os.path.exists(os.path.join("services", "escape.txt"))
-    assert os.path.exists(os.path.join("services", "myimage", "escape.txt"))
+
+
+def test_load_repository_rejects_escaping_service_id(workspace):
+    with pytest.raises(InvalidPathException):
+        load_repository(
+            url="", mode="dockerfile", port="8080:80", docker_root=".",
+            dockerfile="..", tag="1.0",
+        )
 
 
 def test_load_repository_git_mode_derives_id_from_url(workspace):

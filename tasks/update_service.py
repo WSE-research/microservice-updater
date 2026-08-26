@@ -66,11 +66,16 @@ if __name__ == '__main__':
                 repo.remote('origin').pull()
 
             # update custom files
+            service_dir = os.path.normpath(os.path.join('services', service_id))
             for file in files:
-                file_path = f'services/{service_id}/{file.replace("..", ".")}'
+                # custom files have to stay inside the service's directory
+                file_path = os.path.normpath(os.path.join(service_dir, file))
+                if not file_path.startswith(service_dir + os.sep):
+                    logging.warning(f'Skipping invalid file path {file}')
+                    continue
 
                 os.makedirs(os.path.dirname(file_path), exist_ok=True)
-                    
+
                 with open(file_path, 'w') as f:
                     f.write(files[file])
 
