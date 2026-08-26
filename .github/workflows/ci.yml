@@ -38,7 +38,7 @@ jobs:
       - name: Unit tests with coverage gate
         run: |
           pytest tests/unit \
-            --cov=app --cov=service_config.config --cov=tasks.init_repo --cov=tasks.exceptions \
+            --cov=app --cov=service_config.config --cov=tasks \
             --cov-report=term-missing --cov-report=xml \
             --cov-fail-under=75 --junitxml=pytest-report.xml
       - name: Upload coverage

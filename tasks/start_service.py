@@ -61,11 +61,12 @@ def start_service(service_id: str, mode: str, db, cursor, port, dockerfile, tag,
 
         # image build failed
         except (APIError, BuildError) as e:
+            error_message = (e.explanation if isinstance(e, APIError) else e.msg) or str(e)
             logging.error('Build process failed!')
-            logging.error(e.explanation if e is APIError else e.msg)
+            logging.error(error_message)
             # write error message
             with open('error.txt', 'w') as f:
-                f.write(e.explanation if e is APIError else e.msg)
+                f.write(error_message)
 
             # set state to BUILD FAILED
             cursor.execute('UPDATE repos SET state = \'BUILD FAILED\' WHERE id = ?', (service_id,))
@@ -127,7 +128,7 @@ def start_service(service_id: str, mode: str, db, cursor, port, dockerfile, tag,
             logging.error(e)
             # write error message
             with open('error.txt', 'w') as f:
-                f.write(e.explanation)
+                f.write(e.explanation or str(e))
 
             # set state to BUILD failed
             cursor.execute('UPDATE repos SET state = \'BUILD FAILED\' WHERE id = ?', (service_id,))
