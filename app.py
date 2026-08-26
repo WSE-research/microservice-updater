@@ -4,6 +4,7 @@ import os
 import sqlite3
 from service_config.config import modes, check_ports, regexp, InvalidPortMappingException, PortAlreadyUsedException
 from tasks.init_repo import load_repository
+from tasks.proxy import find_container
 from tasks.exceptions import InvalidVolumeMappingException, RepositoryAlreadyExistsException, InvalidPathException
 import subprocess
 import json
@@ -231,7 +232,8 @@ def update_service(service_id: str):
                 logging.info(f'Fetching state of {service_id}...')
                 try:
                     docker_client = docker.from_env()
-                    container = docker_client.containers.get(service_id)
+                    # the proxy profile runs the service under a colored name
+                    container = find_container(docker_client, service_id)
 
                     # a failed update leaves the previous container serving,
                     # so the stored state has to override the docker state

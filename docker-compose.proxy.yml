@@ -1,0 +1,29 @@
+# Optional reverse-proxy profile for zero-downtime rollouts (issue #149).
+#
+# Start the updater together with the proxy:
+#   docker-compose -f docker-compose.yml -f docker-compose.proxy.yml up -d
+#
+# Without this file the updater behaves exactly as before (phase 1): updates
+# are prepared while the old container serves and the swap costs a few
+# seconds. With it, the registered ports belong to nginx and a rollout only
+# switches the route once the new container is ready.
+version: '3.5'
+services:
+  micro-service-updater:
+    environment:
+      PROXY_ENABLED: "true"
+      PROXY_CONTAINER: microservice-proxy
+      PROXY_CONF_DIR: /proxy/conf.d
+    volumes:
+      - ./proxy/conf.d:/proxy/conf.d
+
+  microservice-proxy:
+    image: nginx:alpine
+    container_name: microservice-proxy
+    restart: always
+    # host networking lets the updater add listeners for arbitrary registered
+    # ports with a reload instead of recreating the proxy container
+    network_mode: host
+    volumes:
+      - ./proxy/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./proxy/conf.d:/etc/nginx/conf.d:ro

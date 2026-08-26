@@ -162,3 +162,82 @@ def test_docker_compose_mode_build_failure(workspace, db_and_cursor,
     assert "compose build failed" in read_error_file()
     cursor.execute.assert_called_once_with(
         "UPDATE repos SET state = 'BUILD FAILED' WHERE id = ?", ("svc",))
+
+@pytest.fixture
+def proxy_env(workspace, monkeypatch):
+    """Enable the reverse-proxy profile with an isolated config directory."""
+    monkeypatch.setenv("PROXY_ENABLED", "true")
+    monkeypatch.setenv("PROXY_CONF_DIR", str(workspace / "conf.d"))
+    monkeypatch.setenv("PROXY_CONTAINER", "microservice-proxy")
+    return workspace / "conf.d"
+
+
+def started_container(host_ports):
+    container = mock.Mock()
+    container.name = "svc-blue"
+    container.attrs = {"NetworkSettings": {"Ports": {
+        f"{port}/tcp": [{"HostIp": "127.0.0.1", "HostPort": host_port}]
+        for port, host_port in host_ports.items()}}}
+    return container
+
+
+class TestProxyProfile:
+    def test_first_version_starts_as_blue_behind_the_proxy(self, db_and_cursor,
+                                                           docker_client,
+                                                           proxy_env):
+        db, cursor = db_and_cursor
+        docker_client.containers.run.return_value = \
+            started_container({"80": "49153"})
+        docker_client.containers.get.return_value.exec_run.return_value = (0, b"")
+
+        start_service_module.start_service("svc", "docker", db, cursor,
+                                           "8080:80", None, None, [])
+
+        run_call = docker_client.containers.run.call_args
+        assert run_call.kwargs["name"] == "svc-blue"
+        # the registered port belongs to the proxy now
+        assert run_call.kwargs["ports"] == {"80": ("127.0.0.1", None)}
+        config = (proxy_env / "svc.conf").read_text()
+        assert "listen 8080;" in config
+        assert "proxy_pass 127.0.0.1:49153;" in config
+        assert read_error_file() == ""
+
+    def test_dockerfile_mode_is_routed_as_well(self, db_and_cursor,
+                                               docker_client, proxy_env):
+        db, cursor = db_and_cursor
+        docker_client.containers.run.return_value = \
+            started_container({"80": "49153"})
+        docker_client.containers.get.return_value.exec_run.return_value = (0, b"")
+
+        start_service_module.start_service("svc", "dockerfile", db, cursor,
+                                           "8080:80", "nginx", "alpine", [])
+
+        assert docker_client.containers.run.call_args.kwargs["name"] == "svc-blue"
+        assert "proxy_pass 127.0.0.1:49153;" in (proxy_env / "svc.conf").read_text()
+
+    def test_unroutable_container_is_removed_and_reported(self, db_and_cursor,
+                                                          docker_client,
+                                                          proxy_env):
+        db, cursor = db_and_cursor
+        container = started_container({"80": "49153"})
+        docker_client.containers.run.return_value = container
+        docker_client.containers.get.return_value.exec_run.return_value = \
+            (1, b"bad config")
+
+        start_service_module.start_service("svc", "docker", db, cursor,
+                                           "8080:80", None, None, [])
+
+        assert "nginx reload failed" in read_error_file()
+        cursor.execute.assert_called_once_with(
+            "UPDATE repos SET state = 'BUILD FAILED' WHERE id = ?", ("svc",))
+        assert not (proxy_env / "svc.conf").exists()
+
+    def test_compose_mode_is_untouched_by_the_profile(self, db_and_cursor,
+                                                      docker_client, proxy_env):
+        db, cursor = db_and_cursor
+
+        with mock.patch.object(start_service_module.subprocess, "run"):
+            start_service_module.start_service("svc", "docker-compose", db,
+                                               cursor, ".", None, None, [])
+
+        assert not (proxy_env / "svc.conf").exists()

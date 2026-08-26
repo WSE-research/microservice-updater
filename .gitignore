@@ -12,6 +12,9 @@ env/
 *.db
 services/api-keys.json
 
+# Generated reverse-proxy routes (issue #149)
+proxy/conf.d/*.conf
+
 # Unit test / coverage reports
 .coverage
 .coverage.*
@@ -19,3 +22,6 @@ coverage.xml
 htmlcov/
 .pytest_cache/
 pytest-report.xml
+
+# Generated reverse-proxy routes (issue #149)
+proxy/conf.d/*.conf
