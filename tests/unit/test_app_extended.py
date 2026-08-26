@@ -148,6 +148,59 @@ def test_register_rejects_non_list_volumes(app_env):
     assert b"Volume mapping list expected" in resp.data
 
 
+def test_check_volumes_cleans_and_validates(app_env):
+    # regression for issue #145
+    app_module, _ = app_env
+    from tasks.exceptions import InvalidVolumeMappingException
+
+    assert app_module.check_volumes(["data:/data", ""]) == ["data:/data"]
+    assert app_module.check_volumes([]) == []
+    with pytest.raises(InvalidVolumeMappingException):
+        app_module.check_volumes("data:/data")
+    with pytest.raises(InvalidVolumeMappingException):
+        app_module.check_volumes([5])
+
+
+@pytest.mark.parametrize("endpoint_call", [
+    lambda client: post_service(client, mode="dockerfile", image="nginx",
+                                tag="alpine", port="8080:80",
+                                volumes="data:/data"),
+    lambda client: client.post("/service/svc",
+                               json={"API-KEY": API_KEY,
+                                     "volumes": "data:/data"}),
+    lambda client: client.patch("/service/svc",
+                                json={"API-KEY": API_KEY,
+                                      "volumes": "data:/data"}),
+])
+def test_string_volumes_answered_with_400(app_env, endpoint_call):
+    # regression for issue #145: a string used to crash with HTTP 500
+    app_module, client = app_env
+    register_service("svc")
+
+    with mock.patch.object(app_module.subprocess, "Popen") as popen:
+        resp = endpoint_call(client)
+
+    assert resp.status_code == 400
+    assert b"Volume mapping list expected" in resp.data
+    popen.assert_not_called()
+
+
+def test_patch_rejects_invalid_volume_mapping_before_changes(app_env):
+    # PATCH gained volume validation with issue #145: nothing may change
+    app_module, client = app_env
+    register_service("svc", port="8080:80")
+
+    with mock.patch.object(app_module.subprocess, "Popen") as popen:
+        resp = client.patch("/service/svc",
+                            json={"API-KEY": API_KEY, "port": "9090:90",
+                                  "volumes": ["missing-separator"]})
+
+    assert resp.status_code == 400
+    assert b"Invalid volume mapping format provided" in resp.data
+    assert service_row("svc")[4] == "8080:80"
+    popen.assert_not_called()
+
+
 def test_register_drops_empty_volume_entries(app_env):
     app_module, client = app_env
     with mock.patch.object(app_module.subprocess, "Popen") as popen:
