@@ -13,9 +13,37 @@ The service requires a valid SSL certificate. Please edit the `.env` file
 to provide the path to your certificate. `SSL_CERT_FILE` is the path to 
 your certificate. `SSL_KEY_FILE` is the path to your keyfile of the certificate.
 
-Run `docker-compose up -d` to start the service. You can change the external
-port of this service by editing the variable `SERVICE_PORT` in the `.env`
-file.
+Run `docker-compose up -d` to start the service. This pulls the published
+image `wseresearch/microservice-updater`; pin which version with `MSU_VERSION`
+in `.env`. You can change the external port by editing `SERVICE_PORT` in the
+same file.
+
+To build from this checkout instead — for development, or to try a change
+before tagging it:
+
+```shell
+docker-compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+```
+
+### Upgrading a production host
+
+The updater deploys every other service on its host, so upgrade it
+deliberately rather than with a blind `git pull`:
+
+1. **Keep the live state.** `services/` holds the registrations, the
+   per-service directories and `api-keys.json` for every managed service. It
+   is bind-mounted into the container and must survive untouched.
+2. **Keep the host's local files.** `.env` and `ssl/` are edited per host and
+   are not what is in git; check them before and after.
+3. **Note the running container's mounts, ports and network mode**
+   (`docker inspect`) and make sure the compose files reproduce them. A host
+   that has been running for years may predate changes such as
+   `network_mode: bridge` (added for the zero-downtime rollouts in #149).
+4. Set `MSU_VERSION`, then `docker-compose up -d`. Rolling back is the same
+   two steps with the previous version.
+
+The updater cannot cleanly redeploy itself — it would tear down the container
+serving the request — so this stays a manual step by design.
 
 ### Optional: zero-downtime deployment profile
 To roll updates out without any downtime at all, start the updater together

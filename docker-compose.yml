@@ -2,8 +2,12 @@ version: '3.5'
 services:
   micro-service-updater:
     restart: always
-    build:
-      context: .
+    # Deploy what CI published, pinned. Building here instead meant production
+    # ran whatever happened to be in the host's checkout -- which drifted to a
+    # 2022 commit that no longer builds, while every release since sat unused
+    # on Docker Hub (issue #155). To build from source, add the override:
+    #   docker-compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+    image: wseresearch/microservice-updater:${MSU_VERSION:-latest}
     # share the default bridge with the managed containers, so readiness
     # probes can reach them directly (issue #149)
     network_mode: bridge

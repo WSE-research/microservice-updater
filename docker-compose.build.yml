@@ -1,0 +1,11 @@
+# Build the updater from this checkout instead of pulling the published image.
+#
+#   docker-compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+#
+# For development and for testing a change before tagging it. Production
+# deploys the image CI publishes (see docker-compose.yml and issue #155).
+version: '3.5'
+services:
+  micro-service-updater:
+    build:
+      context: .
