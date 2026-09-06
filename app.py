@@ -8,6 +8,7 @@ from tasks.proxy import find_container
 from tasks.exceptions import InvalidVolumeMappingException, RepositoryAlreadyExistsException, InvalidPathException
 import subprocess
 import json
+import re
 from git import GitCommandError
 from base64 import b64encode
 import logging
@@ -80,6 +81,40 @@ def check_health_path(health_path):
     return health_path
 
 
+class InvalidMemLimitException(Exception):
+    """Raised when a service's memory limit is not a Docker size string"""
+
+    def __init__(self, message: str):
+        self.message = message
+        super().__init__(message)
+
+
+def check_mem_limit(mem_limit):
+    """
+    Validate an optional Docker memory limit
+
+    Accepts a plain byte count or a Docker size suffix, e.g. '2g', '512m'.
+    An empty value means "no limit", which is the historic behaviour.
+
+    :param mem_limit: the requested limit
+    :return: the normalised limit, or None for no limit
+    :raises InvalidMemLimitException: if it is not a valid size
+    """
+    if mem_limit in (None, ''):
+        return None
+
+    if not isinstance(mem_limit, str):
+        raise InvalidMemLimitException('mem_limit has to be a string, e.g. "2g"')
+
+    normalised = mem_limit.strip().lower()
+
+    if not re.fullmatch(r'\d+[bkmg]?', normalised):
+        raise InvalidMemLimitException(
+            f'invalid mem_limit "{mem_limit}"; expected e.g. 2g, 512m or a byte count')
+
+    return normalised
+
+
 def check_files(files):
     """
     Validate a custom file mapping
@@ -103,9 +138,9 @@ def check_files(files):
     return files
 
 
-def start_update(service_id: str, files: dict, volumes: list[str]):
+def start_update(service_id: str, files: dict, volumes: list[str], mem_limit=None):
     subprocess.Popen(['python', 'tasks/update_service.py', service_id, json.dumps(files),
-                      json.dumps(volumes)])
+                      json.dumps(volumes), mem_limit or ''])
 
 
 def valid(docker_mode: str):
@@ -160,15 +195,22 @@ def update_service(service_id: str):
 
                 files = payload['files'] if 'files' in payload else {}
                 volumes = payload['volumes'] if 'volumes' in payload else []
+                # Read from the PAYLOAD, like volumes and files -- not from the
+                # row stored at registration. Port and image are frozen at
+                # registration and a re-registration silently does nothing, so
+                # a limit stored that way could never be changed afterwards.
+                mem_limit = payload['mem_limit'] if 'mem_limit' in payload else None
 
                 try:
                     volumes = check_volumes(volumes)
                     files = check_files(files)
+                    mem_limit = check_mem_limit(mem_limit)
 
                     # start background task to update the service
-                    start_update(service_id, files, volumes)
+                    start_update(service_id, files, volumes, mem_limit)
                     return 'Update initiated', 200
-                except (InvalidVolumeMappingException, InvalidPathException) as e:
+                except (InvalidVolumeMappingException, InvalidPathException,
+                        InvalidMemLimitException) as e:
                     logging.error(f'Invalid update payload provided: {e.message}')
                     return e.message, 400
             elif method == 'DELETE':
@@ -189,7 +231,8 @@ def update_service(service_id: str):
 
                     if 'health_path' in payload:
                         check_health_path(payload['health_path'])
-                except (InvalidVolumeMappingException, InvalidPathException) as e:
+                except (InvalidVolumeMappingException, InvalidPathException,
+                        InvalidMemLimitException) as e:
                     logging.error(f'Invalid patch payload provided: {e.message}')
                     return e.message, 400
 

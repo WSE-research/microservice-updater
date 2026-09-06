@@ -52,12 +52,22 @@ def read_env_file():
 
 
 def run_container(docker_client, image_ref: str, name: str, ports: dict,
-                  env, volumes, tty=False):
-    """Start a detached service container with the standard settings"""
+                  env, volumes, tty=False, mem_limit=None):
+    """
+    Start a detached service container with the standard settings
+
+    :param mem_limit: optional Docker memory limit ('2g', '512m', ...). Passed
+        as both mem_limit and memswap_limit, which is what disables swap for
+        the container -- without that a leaking service simply moves on to the
+        host's swap and starves everything else anyway. None leaves the
+        container unlimited, which is the historic behaviour.
+    """
     return docker_client.containers.run(image_ref, detach=True, tty=tty,
                                         ports=ports, name=name,
                                         restart_policy={'Name': 'always'},
-                                        environment=env, volumes=volumes)
+                                        environment=env, volumes=volumes,
+                                        mem_limit=mem_limit,
+                                        memswap_limit=mem_limit)
 
 
 def prepare_image(docker_client, service_id: str, mode: str, image: str, tag: str):
@@ -149,7 +159,7 @@ def set_state(db, cursor, service_id: str, state: str, error_message=''):
 
 
 def rollback(docker_client, service_id: str, rollback_image, ports: dict,
-             env, volumes, tty):
+             env, volumes, tty, mem_limit=None):
     """Restart the previous image after a failed update, if one exists"""
     if not rollback_image:
         return
@@ -157,14 +167,14 @@ def rollback(docker_client, service_id: str, rollback_image, ports: dict,
     logging.info(f'Rolling back {service_id} to the previous image...')
     try:
         run_container(docker_client, rollback_image, service_id, ports, env,
-                      volumes, tty)
+                      volumes, tty, mem_limit=mem_limit)
     except APIError as e:
         logging.error(f'Rollback of {service_id} failed: {e}')
 
 
 def update_single_container_service(docker_client, service_id: str, mode: str,
                                     db, cursor, port: str, image: str, tag: str,
-                                    health_path: str, volumes):
+                                    health_path: str, volumes, mem_limit=None):
     """
     Update a 'docker' or 'dockerfile' service with minimal downtime.
 
@@ -207,11 +217,12 @@ def update_single_container_service(docker_client, service_id: str, mode: str,
 
     try:
         new_container = run_container(docker_client, image_ref, service_id,
-                                      ports, env, volumes, tty)
+                                      ports, env, volumes, tty, mem_limit=mem_limit)
     except APIError as e:
         message = e.explanation or str(e)
         logging.error(f'Starting the updated container failed: {message}')
-        rollback(docker_client, service_id, rollback_image, ports, env, volumes, tty)
+        rollback(docker_client, service_id, rollback_image, ports, env, volumes, tty,
+                 mem_limit)
         set_state(db, cursor, service_id, 'UPDATE FAILED', message)
         return False
 
@@ -228,7 +239,8 @@ def update_single_container_service(docker_client, service_id: str, mode: str,
     except APIError as e:
         logging.error(f'Removing the failed container failed: {e}')
 
-    rollback(docker_client, service_id, rollback_image, ports, env, volumes, tty)
+    rollback(docker_client, service_id, rollback_image, ports, env, volumes, tty,
+             mem_limit)
     set_state(db, cursor, service_id, 'UPDATE FAILED', message)
     return False
 
@@ -258,7 +270,7 @@ def update_compose_service(service_id: str, db, cursor):
 
 def update_proxied_service(docker_client, service_id: str, mode: str, db, cursor,
                            port: str, image: str, tag: str, health_path: str,
-                           volumes):
+                           volumes, mem_limit=None):
     """
     Update a 'docker' or 'dockerfile' service without any downtime (phase 2).
 
@@ -296,7 +308,8 @@ def update_proxied_service(docker_client, service_id: str, mode: str, db, cursor
 
     try:
         new_container = run_container(docker_client, image_ref, new_name,
-                                      proxy.publish_spec(port), env, volumes, tty)
+                                      proxy.publish_spec(port), env, volumes, tty,
+                                      mem_limit=mem_limit)
     except APIError as e:
         message = e.explanation or str(e)
         logging.error(f'Starting the updated container failed: {message}')
@@ -335,7 +348,7 @@ def update_proxied_service(docker_client, service_id: str, mode: str, db, cursor
 
 def update_service_containers(docker_client, service_id: str, mode: str, db,
                               cursor, port: str, image: str, tag: str,
-                              health_path: str, volumes):
+                              health_path: str, volumes, mem_limit=None):
     """
     Run the rollout flow matching the service mode and deployment profile
 
@@ -346,8 +359,9 @@ def update_service_containers(docker_client, service_id: str, mode: str, db,
 
     if proxy.proxy_enabled():
         return update_proxied_service(docker_client, service_id, mode, db, cursor,
-                                      port, image, tag, health_path, volumes)
+                                      port, image, tag, health_path, volumes,
+                                      mem_limit)
 
     return update_single_container_service(docker_client, service_id, mode, db,
                                            cursor, port, image, tag, health_path,
-                                           volumes)
+                                           volumes, mem_limit)

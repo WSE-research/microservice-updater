@@ -568,3 +568,43 @@ class TestUpdateServiceContainers:
             assert self.dispatch(docker_client, db_env) is True
 
         single.assert_called_once()
+
+
+# --- memory limits reach Docker -----------------------------------------
+
+def test_run_container_passes_the_memory_limit_and_disables_swap():
+    """A limit that does not also cap swap is no limit: a leaking service
+    simply moves on to the host's swap and starves everything else anyway.
+    That is exactly how one container took fim-swe01 down on 2026-09-06."""
+    docker_client = mock.MagicMock()
+
+    rollout.run_container(docker_client, "img:latest", "svc", {"80/tcp": 8080},
+                          env=[], volumes=[], mem_limit="2g")
+
+    kwargs = docker_client.containers.run.call_args.kwargs
+    assert kwargs["mem_limit"] == "2g"
+    assert kwargs["memswap_limit"] == "2g", "swap must be capped with memory"
+
+
+def test_run_container_without_a_limit_stays_unlimited():
+    """Historic behaviour: services that declare no limit are untouched."""
+    docker_client = mock.MagicMock()
+
+    rollout.run_container(docker_client, "img:latest", "svc", {"80/tcp": 8080},
+                          env=[], volumes=[])
+
+    kwargs = docker_client.containers.run.call_args.kwargs
+    assert kwargs["mem_limit"] is None
+    assert kwargs["memswap_limit"] is None
+
+
+def test_rollback_keeps_the_memory_limit():
+    """A rollback must not silently restore an unlimited container."""
+    docker_client = mock.MagicMock()
+
+    rollout.rollback(docker_client, "svc", "old-image", {"80/tcp": 8080},
+                     env=[], volumes=[], tty=False, mem_limit="2g")
+
+    kwargs = docker_client.containers.run.call_args.kwargs
+    assert kwargs["mem_limit"] == "2g"
+    assert kwargs["memswap_limit"] == "2g"

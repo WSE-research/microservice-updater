@@ -475,7 +475,7 @@ def test_patch_persists_tag_and_port(app_env):
     assert row[4] == "9090:90"
     assert row[7] == "nightly"
     popen.assert_called_once_with(
-        ["python", "tasks/update_service.py", "svc", "{}", "[]"])
+        ["python", "tasks/update_service.py", "svc", "{}", "[]", ""])
 
 
 def test_patch_rejects_invalid_port_and_keeps_db(app_env):
@@ -535,3 +535,59 @@ def test_get_state_finds_a_proxied_container(app_env):
     assert [call.args[0] for call
             in from_env.return_value.containers.get.call_args_list] == \
         ["svc", "svc-blue", "svc-green"]
+
+
+# --- memory limits -------------------------------------------------------
+# A service that leaks used to be able to consume the whole host: on
+# 2026-09-06 one container reached 18.17 GB, exhausted 31 GiB of RAM and all
+# swap, and took every other service on the box down with it -- including the
+# reverse proxy. A limit has to be expressible, and it has to survive a
+# redeploy, so it is read from the update PAYLOAD rather than stored at
+# registration (port and image are stored, and re-registering silently does
+# nothing, so a stored limit could never be changed afterwards).
+
+def test_update_passes_mem_limit_to_the_task(app_env):
+    app_module, client = app_env
+    register_service("svc")
+
+    with mock.patch.object(app_module.subprocess, "Popen") as popen:
+        resp = client.post("/service/svc", json={"API-KEY": API_KEY, "mem_limit": "2g"})
+
+    assert resp.status_code == 200
+    popen.assert_called_once_with(
+        ["python", "tasks/update_service.py", "svc", "{}", "[]", "2g"])
+
+
+def test_update_without_mem_limit_stays_unlimited(app_env):
+    app_module, client = app_env
+    register_service("svc")
+
+    with mock.patch.object(app_module.subprocess, "Popen") as popen:
+        resp = client.post("/service/svc", json={"API-KEY": API_KEY})
+
+    assert resp.status_code == 200
+    popen.assert_called_once_with(
+        ["python", "tasks/update_service.py", "svc", "{}", "[]", ""])
+
+
+@pytest.mark.parametrize("value", ["2g", "512m", "1024k", "104857600", "2G", " 2g "])
+def test_valid_mem_limits_are_accepted(app_env, value):
+    app_module, client = app_env
+    register_service("svc")
+
+    with mock.patch.object(app_module.subprocess, "Popen"):
+        resp = client.post("/service/svc", json={"API-KEY": API_KEY, "mem_limit": value})
+
+    assert resp.status_code == 200
+
+
+@pytest.mark.parametrize("value", ["2gb", "lots", "-1g", "2 g", "g2", 2048, "2.5g"])
+def test_invalid_mem_limit_is_rejected_and_nothing_is_started(app_env, value):
+    app_module, client = app_env
+    register_service("svc")
+
+    with mock.patch.object(app_module.subprocess, "Popen") as popen:
+        resp = client.post("/service/svc", json={"API-KEY": API_KEY, "mem_limit": value})
+
+    assert resp.status_code == 400
+    popen.assert_not_called()

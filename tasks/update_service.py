@@ -59,6 +59,11 @@ if __name__ == '__main__':
 
     volumes = loads(sys.argv[3])
 
+    # optional Docker memory limit, e.g. '2g'; empty means unlimited. Passed
+    # per update rather than stored, so it can be changed without the
+    # de-register/re-register dance that port and image would need.
+    mem_limit = sys.argv[4] if len(sys.argv) > 4 and sys.argv[4] else None
+
     with sqlite3.connect('services/services.db') as db:
         cursor = db.cursor()
 
@@ -99,6 +104,6 @@ if __name__ == '__main__':
             # then swap with readiness check and rollback (issue #149)
             update_service_containers(docker.from_env(), service_id, mode, db,
                                       cursor, port, image, tag, health_path,
-                                      volumes)
+                                      volumes, mem_limit)
 
             os.chdir(base_dir)
