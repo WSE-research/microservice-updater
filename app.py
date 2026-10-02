@@ -238,7 +238,7 @@ def update_service(service_id: str):
 
                 if 'port' in payload:
                     try:
-                        check_ports(payload['port'], service_db.cursor())
+                        check_ports(payload['port'], service_db.cursor(), stored_id)
                     except InvalidPortMappingException as e:
                         return e.message, 400
                     except PortAlreadyUsedException as e:

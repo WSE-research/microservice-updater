@@ -478,6 +478,19 @@ def test_patch_persists_tag_and_port(app_env):
         ["python", "tasks/update_service.py", "svc", "{}", "[]", ""])
 
 
+def test_patch_adds_port_to_own_mapping(app_env):
+    app_module, client = app_env
+    register_service("svc", port="443:443")
+
+    with mock.patch.object(app_module.subprocess, "Popen") as popen:
+        resp = client.patch("/service/svc",
+                            json={"API-KEY": API_KEY, "port": "443:443,80:80"})
+
+    assert resp.status_code == 200
+    assert service_row("svc")[4] == "443:443,80:80"
+    popen.assert_called_once()
+
+
 def test_patch_rejects_invalid_port_and_keeps_db(app_env):
     app_module, client = app_env
     register_service("svc", port="8080:80")

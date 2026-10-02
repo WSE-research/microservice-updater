@@ -189,6 +189,7 @@ The API provides the following endpoints:
     as well as the `health_path` readiness probe (an empty string removes the probe).
     The service will be rebuilt after the application of the changes. If you used `volumes` you need to provide them in
     the request body again.
+    A new `port` mapping may keep external ports the service already publishes (e.g. `443:443` → `443:443,80:80`); only ports used by *other* services are rejected.
     ```json
     {
       "API-KEY": "a49bc0...",

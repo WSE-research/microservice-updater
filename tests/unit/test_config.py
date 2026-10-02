@@ -124,3 +124,25 @@ def test_check_ports_detects_conflict_after_comma(cursor):
     )
     with pytest.raises(PortAlreadyUsedException):
         check_ports("8080:80", cursor)
+
+
+def test_check_ports_ignores_own_mapping_of_service(cursor):
+    cursor.execute(
+        "INSERT INTO repos VALUES ('svc', 'url', 'docker', 'RUNNING',"
+        " '443:443', '.', '', '')"
+    )
+    assert check_ports("443:443,80:80", cursor, "svc") is True
+
+
+def test_check_ports_still_detects_other_service_when_ignoring_own(cursor):
+    cursor.execute(
+        "INSERT INTO repos VALUES ('svc', 'url', 'docker', 'RUNNING',"
+        " '443:443', '.', '', '')"
+    )
+    cursor.execute(
+        "INSERT INTO repos VALUES ('other', 'url', 'docker', 'RUNNING',"
+        " '8080:80', '.', '', '')"
+    )
+    with pytest.raises(PortAlreadyUsedException) as exc:
+        check_ports("443:443,8080:80", cursor, "svc")
+    assert "8080" in exc.value.message
