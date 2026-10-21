@@ -225,6 +225,68 @@ class TestUpdateSingleContainerService:
         assert service_state(db) == "UPDATE FAILED"
         assert read_error_file() == "port already allocated"
 
+    def test_failed_start_removes_the_created_container_before_rollback(
+            self, docker_client, db_env):
+        # a failed start leaves the created container behind; while it holds
+        # the name, the rollback and every later update fail with a conflict
+        db, _ = db_env
+        old_container, created = mock.Mock(), mock.Mock()
+        old_container.image.id = "sha256:old-image"
+        docker_client.containers.get.side_effect = [old_container, created]
+        calls = []
+        created.remove.side_effect = lambda **kw: calls.append("remove")
+
+        def run(*args, **kwargs):
+            calls.append("run")
+            if calls.count("run") == 1:
+                raise APIError("start", explanation="address already in use")
+            return mock.Mock()
+
+        docker_client.containers.run.side_effect = run
+
+        assert self.run_update(docker_client, db_env) is False
+
+        assert calls == ["run", "remove", "run"]
+        created.remove.assert_called_once_with(force=True)
+        assert docker_client.containers.run.call_args_list[1].args[0] == \
+            "sha256:old-image"
+        assert service_state(db) == "UPDATE FAILED"
+
+    def test_old_container_without_its_image_is_still_replaced(
+            self, docker_client, db_env, instant_clock):
+        # the container outlived its image: no rollback anchor, but it must
+        # still be stopped and removed, or the new one cannot take the name
+        db, _ = db_env
+        old_container = mock.Mock()
+        type(old_container).image = mock.PropertyMock(
+            side_effect=ImageNotFound("no such image"))
+        docker_client.containers.get.return_value = old_container
+        docker_client.containers.run.return_value.status = "running"
+
+        assert self.run_update(docker_client, db_env) is True
+
+        old_container.stop.assert_called_once()
+        old_container.remove.assert_called_once()
+        assert docker_client.containers.run.call_count == 1
+        assert service_state(db) == "RUNNING"
+
+    def test_failed_start_without_rollback_image_cleans_up(self, docker_client,
+                                                            db_env):
+        db, _ = db_env
+        old_container, created = mock.Mock(), mock.Mock()
+        type(old_container).image = mock.PropertyMock(
+            side_effect=ImageNotFound("no such image"))
+        docker_client.containers.get.side_effect = [old_container, created]
+        docker_client.containers.run.side_effect = APIError(
+            "start", explanation="address already in use")
+
+        assert self.run_update(docker_client, db_env) is False
+
+        old_container.remove.assert_called_once()
+        created.remove.assert_called_once_with(force=True)
+        assert docker_client.containers.run.call_count == 1
+        assert service_state(db) == "UPDATE FAILED"
+
     def test_first_start_without_old_container(self, docker_client, db_env,
                                                instant_clock):
         db, _ = db_env

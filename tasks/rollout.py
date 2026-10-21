@@ -158,6 +158,16 @@ def set_state(db, cursor, service_id: str, state: str, error_message=''):
         f.write(error_message)
 
 
+def remove_container(docker_client, name: str):
+    """Remove the container of that name, if there is one"""
+    try:
+        docker_client.containers.get(name).remove(force=True)
+    except NotFound:
+        pass
+    except APIError as e:
+        logging.error(f'Removing the container {name} failed: {e}')
+
+
 def rollback(docker_client, service_id: str, rollback_image, ports: dict,
              env, volumes, tty, mem_limit=None):
     """Restart the previous image after a failed update, if one exists"""
@@ -204,11 +214,21 @@ def update_single_container_service(docker_client, service_id: str, mode: str,
     rollback_image = None
     try:
         old_container = docker_client.containers.get(service_id)
-        rollback_image = old_container.image.id
+    except NotFound:
+        old_container = None
+        logging.warning(f'No running container for {service_id} found')
+
+    if old_container is not None:
+        # ImageNotFound is a NotFound too: when the old container outlived its image,
+        # it still has to make room for the new one, there is just nothing to roll
+        # back to -- otherwise it keeps the name and every later update fails
+        try:
+            rollback_image = old_container.image.id
+        except ImageNotFound:
+            logging.warning(f'The image of the old container of {service_id} is gone;'
+                            f' no rollback possible')
         old_container.stop()
         old_container.remove()
-    except NotFound:
-        logging.warning(f'No running container for {service_id} found')
 
     if mode == 'docker':
         # promote the staged build to the service's regular tag
@@ -221,6 +241,9 @@ def update_single_container_service(docker_client, service_id: str, mode: str,
     except APIError as e:
         message = e.explanation or str(e)
         logging.error(f'Starting the updated container failed: {message}')
+        # a start that fails (e.g. port in use) leaves the created container
+        # behind; it holds the name the rollback and every later update need
+        remove_container(docker_client, service_id)
         rollback(docker_client, service_id, rollback_image, ports, env, volumes, tty,
                  mem_limit)
         set_state(db, cursor, service_id, 'UPDATE FAILED', message)
