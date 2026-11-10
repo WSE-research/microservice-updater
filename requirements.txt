@@ -1,6 +1,6 @@
 certifi==2026.10.23
 charset-normalizer==3.3.2
-click==8.5.0
+click==8.5.1
 colorama==0.4.6
 docker==7.2.0
 Flask==3.1.3
